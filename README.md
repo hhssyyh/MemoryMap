@@ -61,13 +61,13 @@ docs/       # Project Documentation
 
 프로젝트 상세 문서는 `docs` 디렉터리에서 확인할 수 있습니다.
 
-| Document | Description |
-|----------|-------------|
+| Document            | Description           |
+| ------------------- | --------------------- |
 | PROJECT_OVERVIEW.md | 프로젝트 개요 및 목표 |
-| FEATURES.md | 기능 정의 |
-| TECH_STACK.md | 기술 스택 |
-| ARCHITECTURE.md | 시스템 아키텍처 |
-| TODO.md | 개발 진행 현황 |
+| FEATURES.md         | 기능 정의             |
+| TECH_STACK.md       | 기술 스택             |
+| ARCHITECTURE.md     | 시스템 아키텍처       |
+| TODO.md             | 개발 진행 현황        |
 
 ---
 
