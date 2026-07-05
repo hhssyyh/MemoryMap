@@ -15,7 +15,8 @@
       "@rnmapbox/maps"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.memory-map"
     },
     "android": {
       "edgeToEdgeEnabled": true,
