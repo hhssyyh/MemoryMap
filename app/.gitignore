@@ -1,15 +1,97 @@
-node_modules/
-.expo/
-dist/
-android/
-ios/
-npm-debug.log*
-*.keystore
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
+# -------------------------
+# OS
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------
+# IDE - IntelliJ / Android Studio
+# -------------------------
+.idea/
+*.iml
+
+
+# -------------------------
+# Configurations and Environmenta variables
+# -------------------------
 .env
 .env.*
 !.env.example
+
+
+# -------------------------
+# Private Keys
+# -------------------------
+*.p8
+*.p12
+*.key
+
+
+# -------------------------
+# Preserve existing settings
+# -------------------------
+*.mobileprovision
+
+# -------------------------
+# Node
+# -------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Choose one package manager lock file and commit it.
+# Do NOT ignore the lock file you actually use.
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# -------------------------
+# React Native / Metro
+# -------------------------
+.metro-health-check*
+.expo/
+.expo-shared/
+
+# -------------------------
+# Android
+# -------------------------
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+android/.idea/
+android/captures/
+android/**/.cxx/
+
+# APK / AAB outputs
+*.apk
+*.aab
+
+# Keystore - 보통 commit 금지
+*.jks
+*.keystore
+android/app/*.jks
+android/app/*.keystore
+android/keystores/
+android/gradle.properties.local
+
+# -------------------------
+# iOS
+# -------------------------
+ios/Pods/
+ios/build/
+ios/DerivedData/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+
+# Xcode user-specific files
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+*.xcuserstate
+xcuserdata/
+DerivedData/
