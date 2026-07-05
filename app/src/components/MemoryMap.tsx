@@ -1,9 +1,9 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Mapbox from '@rnmapbox/maps';
 
-import { memoryMapStyle } from '../constants/mapStyle';
 import { colors } from '../constants/theme';
+import type { CurrentCoordinate } from '../hooks/useCurrentLocation';
 import type { DiaryPoint } from '../types/diary';
 
 type MemoryMapProps = {
@@ -14,14 +14,17 @@ type MemoryMapProps = {
   expanded?: boolean;
   onExpand?: () => void;
   topInset?: number;
+  currentLocation: CurrentCoordinate | null;
+  isLocating: boolean;
+  onRequestLocation: () => Promise<void>;
 };
 
-const initialRegion = {
-  latitude: 37.5385,
-  longitude: 127.053,
-  latitudeDelta: 0.04,
-  longitudeDelta: 0.05,
-};
+const initialCenter: [number, number] = [127.053, 37.5385];
+const accessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
+
+if (accessToken) {
+  void Mapbox.setAccessToken(accessToken);
+}
 
 export function MemoryMap({
   points,
@@ -31,54 +34,104 @@ export function MemoryMap({
   expanded = false,
   onExpand,
   topInset = 0,
+  currentLocation,
+  isLocating,
+  onRequestLocation,
 }: MemoryMapProps) {
-  const mapRef = useRef<MapView>(null);
+  const cameraRef = useRef<Mapbox.Camera>(null);
+
+  useEffect(() => {
+    if (currentLocation) {
+      cameraRef.current?.setCamera({
+        animationDuration: 600,
+        animationMode: 'flyTo',
+        centerCoordinate: [
+          currentLocation.longitude,
+          currentLocation.latitude,
+        ],
+        zoomLevel: 15,
+      });
+    }
+  }, [currentLocation]);
 
   const fitAllPoints = () => {
-    mapRef.current?.fitToCoordinates(
-      points.map((point) => point.coordinate),
-      {
-        animated: true,
-        edgePadding: { top: 70, right: 45, bottom: 70, left: 45 },
-      },
+    if (points.length === 0) {
+      return;
+    }
+
+    const longitudes = points.map((point) => point.coordinate.longitude);
+    const latitudes = points.map((point) => point.coordinate.latitude);
+
+    cameraRef.current?.fitBounds(
+      [Math.max(...longitudes), Math.max(...latitudes)],
+      [Math.min(...longitudes), Math.min(...latitudes)],
+      [70, 45, 70, 45],
+      600,
     );
   };
 
+  if (!accessToken) {
+    return (
+      <View style={[styles.container, styles.configurationError]}>
+        <Text style={styles.configurationErrorTitle}>Mapbox 설정 필요</Text>
+        <Text style={styles.configurationErrorText}>
+          EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN을 확인해 주세요.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, expanded && styles.containerExpanded]}>
-      <MapView
-        ref={mapRef}
-        customMapStyle={memoryMapStyle}
-        initialRegion={initialRegion}
-        loadingBackgroundColor={colors.background}
-        loadingEnabled
-        loadingIndicatorColor={colors.primary}
-        mapPadding={{ top: 40 + topInset, right: 0, bottom: 12, left: 0 }}
-        mapType="standard"
-        moveOnMarkerPress={false}
-        provider={PROVIDER_GOOGLE}
+      <Mapbox.MapView
+        compassEnabled={false}
+        logoEnabled
+        pitchEnabled={false}
         rotateEnabled={false}
-        showsBuildings={false}
-        showsCompass
-        showsPointsOfInterest
+        scaleBarEnabled={false}
         style={StyleSheet.absoluteFill}
-        toolbarEnabled={false}
+        styleURL={Mapbox.StyleURL.Street}
       >
+        <Mapbox.Camera
+          defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: 12.5 }}
+          ref={cameraRef}
+        />
+
         {points.map((point) => (
-          <Marker
+          <Mapbox.PointAnnotation
+            coordinate={[
+              point.coordinate.longitude,
+              point.coordinate.latitude,
+            ]}
+            id={point.id}
             key={point.id}
-            coordinate={point.coordinate}
-            description={`${point.diaries.length}개의 기록 · 눌러서 보기`}
-            identifier={point.id}
-            onCalloutPress={() => onOpenDiaries(point)}
-            onPress={() => onSelectPoint(point)}
-            pinColor={
-              point.id === selectedPoint.id ? colors.accent : colors.primary
-            }
-            title={`${point.diaries[0]?.emoji ?? '📍'} ${point.location}`}
-          />
+            onSelected={() => {
+              onSelectPoint(point);
+              onOpenDiaries(point);
+            }}
+          >
+            <View
+              style={[
+                styles.marker,
+                point.id === selectedPoint.id && styles.markerSelected,
+              ]}
+            >
+              <Text style={styles.markerEmoji}>
+                {point.diaries[0]?.emoji ?? '📍'}
+              </Text>
+            </View>
+          </Mapbox.PointAnnotation>
         ))}
-      </MapView>
+
+        {currentLocation ? (
+          <Mapbox.PointAnnotation
+            coordinate={[currentLocation.longitude, currentLocation.latitude]}
+            id="current-location"
+          >
+            <View style={styles.currentLocationMarker} />
+          </Mapbox.PointAnnotation>
+        ) : null}
+      </Mapbox.MapView>
 
       <View
         pointerEvents="none"
@@ -103,6 +156,19 @@ export function MemoryMap({
       ) : null}
 
       <Pressable
+        accessibilityLabel="현재 위치로 이동"
+        accessibilityRole="button"
+        disabled={isLocating}
+        onPress={() => void onRequestLocation()}
+        style={({ pressed }) => [
+          styles.locationButton,
+          (pressed || isLocating) && styles.controlButtonPressed,
+        ]}
+      >
+        <Text style={styles.locationButtonIcon}>{isLocating ? '…' : '◎'}</Text>
+      </Pressable>
+
+      <Pressable
         accessibilityLabel="모든 추억 위치 보기"
         accessibilityRole="button"
         onPress={fitAllPoints}
@@ -117,6 +183,19 @@ export function MemoryMap({
   );
 }
 
+const controlButton = {
+  alignItems: 'center',
+  backgroundColor: colors.surface,
+  elevation: 4,
+  justifyContent: 'center',
+  position: 'absolute',
+  right: 16,
+  shadowColor: colors.text,
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.16,
+  shadowRadius: 4,
+} as const;
+
 const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.map,
@@ -126,9 +205,50 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
+  configurationError: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  configurationErrorText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  configurationErrorTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+  },
   containerExpanded: {
     borderRadius: 0,
     minHeight: 0,
+  },
+  currentLocationMarker: {
+    backgroundColor: '#2D7FF9',
+    borderColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 3,
+    height: 20,
+    width: 20,
+  },
+  marker: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.primary,
+    borderRadius: 20,
+    borderWidth: 3,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  markerEmoji: {
+    fontSize: 20,
+  },
+  markerSelected: {
+    borderColor: colors.accent,
+    transform: [{ scale: 1.12 }],
   },
   mapBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
@@ -145,34 +265,24 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   fitButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
+    ...controlButton,
     borderRadius: 22,
     bottom: 18,
-    elevation: 4,
     height: 44,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 16,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
-    shadowRadius: 4,
+    width: 44,
+  },
+  locationButton: {
+    ...controlButton,
+    borderRadius: 22,
+    bottom: 70,
+    height: 44,
     width: 44,
   },
   expandButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
+    ...controlButton,
     borderRadius: 20,
-    elevation: 4,
     height: 40,
-    justifyContent: 'center',
-    position: 'absolute',
     right: 14,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.14,
-    shadowRadius: 4,
     width: 40,
   },
   controlButtonPressed: {
@@ -187,6 +297,11 @@ const styles = StyleSheet.create({
   fitButtonIcon: {
     color: colors.primary,
     fontSize: 25,
+    fontWeight: '700',
+  },
+  locationButtonIcon: {
+    color: colors.primary,
+    fontSize: 24,
     fontWeight: '700',
   },
 });

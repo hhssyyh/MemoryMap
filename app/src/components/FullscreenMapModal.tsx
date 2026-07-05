@@ -3,6 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '../constants/theme';
 import type { DiaryPoint } from '../types/diary';
+import type { CurrentCoordinate } from '../hooks/useCurrentLocation';
 import { MemoryMap } from './MemoryMap';
 
 type FullscreenMapModalProps = {
@@ -12,6 +13,9 @@ type FullscreenMapModalProps = {
   onClose: () => void;
   onOpenDiaries: (point: DiaryPoint) => void;
   onSelectPoint: (point: DiaryPoint) => void;
+  currentLocation: CurrentCoordinate | null;
+  isLocating: boolean;
+  onRequestLocation: () => Promise<void>;
 };
 
 export function FullscreenMapModal({
@@ -21,6 +25,9 @@ export function FullscreenMapModal({
   onClose,
   onOpenDiaries,
   onSelectPoint,
+  currentLocation,
+  isLocating,
+  onRequestLocation,
 }: FullscreenMapModalProps) {
   const insets = useSafeAreaInsets();
 
@@ -35,9 +42,12 @@ export function FullscreenMapModal({
       <StatusBar hidden />
       <View style={styles.screen}>
         <MemoryMap
+          currentLocation={currentLocation}
           expanded
           onOpenDiaries={onOpenDiaries}
           onSelectPoint={onSelectPoint}
+          isLocating={isLocating}
+          onRequestLocation={onRequestLocation}
           points={points}
           selectedPoint={selectedPoint}
           topInset={insets.top}

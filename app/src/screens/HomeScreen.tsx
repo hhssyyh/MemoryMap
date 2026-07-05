@@ -7,6 +7,7 @@ import { FullscreenMapModal } from '../components/FullscreenMapModal';
 import { MemoryMap } from '../components/MemoryMap';
 import { sampleDiaryPoints } from '../constants/sampleDiaryPoints';
 import { colors, spacing } from '../constants/theme';
+import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import type { DiaryPoint } from '../types/diary';
 
 const initialPoint = sampleDiaryPoints[0]!;
@@ -15,6 +16,7 @@ export function HomeScreen() {
   const [selectedPoint, setSelectedPoint] = useState<DiaryPoint>(initialPoint);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [diaryListPoint, setDiaryListPoint] = useState<DiaryPoint | null>(null);
+  const currentLocation = useCurrentLocation();
   const insets = useSafeAreaInsets();
   const latestDiary = selectedPoint.diaries[0]!;
 
@@ -34,9 +36,12 @@ export function HomeScreen() {
         </View>
 
         <MemoryMap
+          currentLocation={currentLocation.coordinate}
+          isLocating={currentLocation.isLocating}
           onExpand={() => setIsMapExpanded(true)}
           onOpenDiaries={setDiaryListPoint}
           onSelectPoint={setSelectedPoint}
+          onRequestLocation={currentLocation.requestLocation}
           points={sampleDiaryPoints}
           selectedPoint={selectedPoint}
         />
@@ -56,9 +61,12 @@ export function HomeScreen() {
         </View>
       </View>
       <FullscreenMapModal
+        currentLocation={currentLocation.coordinate}
+        isLocating={currentLocation.isLocating}
         onClose={() => setIsMapExpanded(false)}
         onOpenDiaries={setDiaryListPoint}
         onSelectPoint={setSelectedPoint}
+        onRequestLocation={currentLocation.requestLocation}
         points={sampleDiaryPoints}
         selectedPoint={selectedPoint}
         visible={isMapExpanded}

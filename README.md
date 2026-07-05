@@ -34,6 +34,7 @@ Diary Map은 사용자가 방문한 장소에서 촬영한 사진을 기반으�
 - React Native
 - Expo
 - TypeScript
+- Mapbox
 
 ### Backend
 
@@ -76,3 +77,34 @@ docs/       # Project Documentation
 현재 프로젝트 초기 설계 단계입니다.
 
 MVP 개발을 진행 중입니다.
+
+---
+
+## 실행 방법
+
+Node.js가 설치된 환경에서 아래 명령어를 실행합니다.
+
+```bash
+cd app
+npm ci
+npm start
+```
+
+의존성이 이미 설치되어 있다면 이후에는 `app` 디렉터리에서 `npm start`만 실행하면 됩니다.
+
+### Android 실기기 USB 연결
+
+개발용 앱이 설치된 Android 기기를 USB로 연결한 경우 아래 명령어로 연결 상태를 확인합니다.
+
+```powershell
+adb devices
+```
+
+기기가 `device` 상태로 표시되면 Metro 서버의 8081 포트를 휴대폰으로 전달하고 개발 서버를 실행합니다.
+
+```powershell
+adb reverse tcp:8081 tcp:8081
+npx expo start --dev-client --localhost
+```
+
+Metro 터미널에서 `a`를 누르면 연결된 Android 기기에서 앱이 열립니다. USB 케이블을 다시 연결하거나 ADB 서버가 재시작된 경우 `adb reverse tcp:8081 tcp:8081` 명령을 다시 실행해야 합니다.
