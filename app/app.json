@@ -12,6 +12,13 @@
           "locationWhenInUsePermission": "지도에서 현재 위치를 표시하기 위해 위치 권한이 필요합니다."
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "일기 사진을 선택하려면 사진 보관함 접근 권한이 필요합니다.",
+          "cameraPermission": "일기 사진을 촬영하려면 카메라 접근 권한이 필요합니다."
+        }
+      ],
       "@rnmapbox/maps"
     ],
     "ios": {

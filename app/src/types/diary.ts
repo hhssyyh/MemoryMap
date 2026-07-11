@@ -2,8 +2,8 @@ export type DiaryEntry = {
   id: string;
   title: string;
   date: string;
-  emoji: string;
   summary: string;
+  photoUri?: string;
 };
 
 export type DiaryPoint = {

@@ -8,7 +8,7 @@ import { MemoryMap } from './MemoryMap';
 
 type FullscreenMapModalProps = {
   points: DiaryPoint[];
-  selectedPoint: DiaryPoint;
+  highlightedPointId?: string;
   visible: boolean;
   onClose: () => void;
   onOpenDiaries: (point: DiaryPoint) => void;
@@ -20,7 +20,7 @@ type FullscreenMapModalProps = {
 
 export function FullscreenMapModal({
   points,
-  selectedPoint,
+  highlightedPointId,
   visible,
   onClose,
   onOpenDiaries,
@@ -44,12 +44,12 @@ export function FullscreenMapModal({
         <MemoryMap
           currentLocation={currentLocation}
           expanded
+          highlightedPointId={highlightedPointId}
           onOpenDiaries={onOpenDiaries}
           onSelectPoint={onSelectPoint}
           isLocating={isLocating}
           onRequestLocation={onRequestLocation}
           points={points}
-          selectedPoint={selectedPoint}
           topInset={insets.top}
         />
         <Pressable

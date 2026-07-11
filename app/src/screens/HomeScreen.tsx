@@ -1,23 +1,26 @@
 import { useState } from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
+import { Image, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DiaryListModal } from '../components/DiaryListModal';
 import { FullscreenMapModal } from '../components/FullscreenMapModal';
 import { MemoryMap } from '../components/MemoryMap';
-import { sampleDiaryPoints } from '../constants/sampleDiaryPoints';
 import { colors, spacing } from '../constants/theme';
+import { useDiaries } from '../context/DiaryContext';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { DiaryPoint } from '../types/diary';
 
-const initialPoint = sampleDiaryPoints[0]!;
-
 export function HomeScreen() {
-  const [selectedPoint, setSelectedPoint] = useState<DiaryPoint>(initialPoint);
+  const { points } = useDiaries();
+  const [selectedPointId, setSelectedPointId] = useState(points[0]!.id);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [diaryListPoint, setDiaryListPoint] = useState<DiaryPoint | null>(null);
   const currentLocation = useCurrentLocation();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
+  const selectedPoint = points.find((point) => point.id === selectedPointId) ?? points[0]!;
   const latestDiary = selectedPoint.diaries[0]!;
 
   return (
@@ -30,25 +33,25 @@ export function HomeScreen() {
             <Text style={styles.title}>나의 추억 지도</Text>
           </View>
           <View style={styles.countBadge}>
-            <Text style={styles.count}>{sampleDiaryPoints.length}</Text>
+            <Text style={styles.count}>{points.length}</Text>
             <Text style={styles.countLabel}>곳</Text>
           </View>
         </View>
 
         <MemoryMap
           currentLocation={currentLocation.coordinate}
+          highlightedPointId={diaryListPoint?.id}
           isLocating={currentLocation.isLocating}
           onExpand={() => setIsMapExpanded(true)}
           onOpenDiaries={setDiaryListPoint}
-          onSelectPoint={setSelectedPoint}
+          onSelectPoint={(point) => setSelectedPointId(point.id)}
           onRequestLocation={currentLocation.requestLocation}
-          points={sampleDiaryPoints}
-          selectedPoint={selectedPoint}
+          points={points}
         />
 
         <View style={styles.memoryCard}>
           <View style={styles.memoryIcon}>
-            <Text style={styles.memoryEmoji}>{latestDiary.emoji}</Text>
+            {latestDiary.photoUri ? <Image source={{ uri: latestDiary.photoUri }} style={styles.memoryPhoto} /> : <Text style={styles.memoryPhotoEmpty}>사진 없음</Text>}
           </View>
           <View style={styles.memoryContent}>
             <Text style={styles.memoryLocation}>{selectedPoint.location}</Text>
@@ -62,17 +65,21 @@ export function HomeScreen() {
       </View>
       <FullscreenMapModal
         currentLocation={currentLocation.coordinate}
+        highlightedPointId={diaryListPoint?.id}
         isLocating={currentLocation.isLocating}
         onClose={() => setIsMapExpanded(false)}
         onOpenDiaries={setDiaryListPoint}
-        onSelectPoint={setSelectedPoint}
+        onSelectPoint={(point) => setSelectedPointId(point.id)}
         onRequestLocation={currentLocation.requestLocation}
-        points={sampleDiaryPoints}
-        selectedPoint={selectedPoint}
+        points={points}
         visible={isMapExpanded}
       />
       <DiaryListModal
         onClose={() => setDiaryListPoint(null)}
+        onOpenDiary={(diary, location) => {
+          setDiaryListPoint(null);
+          navigation.navigate('DiaryDetail', { diary, location });
+        }}
         point={diaryListPoint}
       />
     </View>
@@ -146,11 +153,11 @@ const styles = StyleSheet.create({
     height: 56,
     justifyContent: 'center',
     marginRight: 13,
+    overflow: 'hidden',
     width: 56,
   },
-  memoryEmoji: {
-    fontSize: 27,
-  },
+  memoryPhoto: { height: '100%', width: '100%' },
+  memoryPhotoEmpty: { color: colors.textMuted, fontSize: 9 },
   memoryContent: {
     flex: 1,
   },

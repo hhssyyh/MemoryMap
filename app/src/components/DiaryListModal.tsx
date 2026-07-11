@@ -2,15 +2,16 @@ import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, spacing } from '../constants/theme';
-import type { DiaryPoint } from '../types/diary';
+import type { DiaryEntry, DiaryPoint } from '../types/diary';
 import { DiaryListItem } from './DiaryListItem';
 
 type DiaryListModalProps = {
   point: DiaryPoint | null;
   onClose: () => void;
+  onOpenDiary: (diary: DiaryEntry, location: string) => void;
 };
 
-export function DiaryListModal({ point, onClose }: DiaryListModalProps) {
+export function DiaryListModal({ point, onClose, onOpenDiary }: DiaryListModalProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -52,7 +53,16 @@ export function DiaryListModal({ point, onClose }: DiaryListModalProps) {
             data={point?.diaries ?? []}
             ItemSeparatorComponent={ItemSeparator}
             keyExtractor={(diary) => diary.id}
-            renderItem={({ item }) => <DiaryListItem diary={item} />}
+            renderItem={({ item }) => (
+              <DiaryListItem
+                diary={item}
+                onPress={() => {
+                  if (point) {
+                    onOpenDiary(item, point.location);
+                  }
+                }}
+              />
+            )}
             showsVerticalScrollIndicator={false}
           />
         </View>

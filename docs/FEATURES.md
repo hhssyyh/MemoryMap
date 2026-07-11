@@ -13,11 +13,20 @@
 
 ## 2. Diary
 
+### Diary creation and saved locations
+
+* Create a diary entry from the Diary tab
+* Select an existing saved map location for the new entry
+* Show the saved entry immediately in diary lists and on its map marker
+
 ### 다이어리
 
 * 다이어리 작성
 * 다이어리 조회
+* 목록 및 지도 마커에서 다이어리 상세 조회
 * 다이어리 수정
+* 상세 화면에서 제목, 내용, 사진, 저장된 장소 수정
+* 카메라 촬영 또는 사진 보관함에서 일기 사진 등록
 * 다이어리 삭제
 
 ---
@@ -40,6 +49,8 @@
 * GPS 위치 정보 저장
 * 사진과 위치 연결
 * 지도 마커 생성
+* 사진 카드 형태의 지도 마커 및 사진 미등록 플레이스홀더
+* 같은 날짜에 방문한 장소 경로 연결
 
 ---
 
@@ -52,6 +63,10 @@
 * 현재 위치 이동
 * 지도 확대 / 축소
 * 지도 전체 화면 보기
+* 홈 요약 지도와 별도의 전체 크기 지도 탭
+* 새벽 / 낮 / 해질녘 / 밤 자동 지도 테마
+* 선택 마커 강조 애니메이션
+* 근접 마커 클러스터링 및 확대
 
 ---
 

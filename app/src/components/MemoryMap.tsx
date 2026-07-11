@@ -1,15 +1,16 @@
-import { useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef } from 'react';
+import { Image as RNImage, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Mapbox from '@rnmapbox/maps';
 
 import { colors } from '../constants/theme';
 import type { CurrentCoordinate } from '../hooks/useCurrentLocation';
+import { useMapLightPreset } from '../hooks/useMapLightPreset';
 import type { DiaryPoint } from '../types/diary';
 
 type MemoryMapProps = {
   points: DiaryPoint[];
-  selectedPoint: DiaryPoint;
-  onSelectPoint: (point: DiaryPoint) => void;
+  highlightedPointId?: string;
+  onSelectPoint?: (point: DiaryPoint) => void;
   onOpenDiaries: (point: DiaryPoint) => void;
   expanded?: boolean;
   onExpand?: () => void;
@@ -20,7 +21,70 @@ type MemoryMapProps = {
 };
 
 const initialCenter: [number, number] = [127.053, 37.5385];
+const standardStyleURL = 'mapbox://styles/mapbox/standard';
 const accessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
+
+type MarkerProperties = {
+  imageName: string;
+  pointId: string;
+  selected: boolean;
+};
+
+type ShapePressEvent = {
+  features: GeoJSON.Feature[];
+};
+
+function createMarkerCollection(
+  points: DiaryPoint[],
+  selectedPointId: string,
+): GeoJSON.FeatureCollection<GeoJSON.Point, MarkerProperties> {
+  return {
+    type: 'FeatureCollection',
+    features: points.map((point) => ({
+      type: 'Feature',
+      id: point.id,
+      geometry: {
+        type: 'Point',
+        coordinates: [point.coordinate.longitude, point.coordinate.latitude],
+      },
+      properties: {
+        imageName: `memory-photo-${point.id}`,
+        pointId: point.id,
+        selected: point.id === selectedPointId,
+      },
+    })),
+  };
+}
+
+function createDailyRouteCollection(
+  points: DiaryPoint[],
+): GeoJSON.FeatureCollection<GeoJSON.LineString, { date: string }> {
+  const coordinatesByDate = new Map<string, [number, number][]>();
+
+  points.forEach((point) => {
+    const datesAtPoint = new Set(point.diaries.map((diary) => diary.date));
+
+    datesAtPoint.forEach((date) => {
+      const coordinates = coordinatesByDate.get(date) ?? [];
+      coordinates.push([
+        point.coordinate.longitude,
+        point.coordinate.latitude,
+      ]);
+      coordinatesByDate.set(date, coordinates);
+    });
+  });
+
+  return {
+    type: 'FeatureCollection',
+    features: Array.from(coordinatesByDate.entries())
+      .filter(([, coordinates]) => coordinates.length >= 2)
+      .map(([date, coordinates]) => ({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates },
+        properties: { date },
+      })),
+  };
+}
 
 if (accessToken) {
   void Mapbox.setAccessToken(accessToken);
@@ -28,7 +92,7 @@ if (accessToken) {
 
 export function MemoryMap({
   points,
-  selectedPoint,
+  highlightedPointId,
   onSelectPoint,
   onOpenDiaries,
   expanded = false,
@@ -39,6 +103,16 @@ export function MemoryMap({
   onRequestLocation,
 }: MemoryMapProps) {
   const cameraRef = useRef<Mapbox.Camera>(null);
+  const markerSourceRef = useRef<Mapbox.ShapeSource>(null);
+  const lightPreset = useMapLightPreset();
+  const markerCollection = useMemo(
+    () => createMarkerCollection(points, highlightedPointId ?? ''),
+    [highlightedPointId, points],
+  );
+  const dailyRouteCollection = useMemo(
+    () => createDailyRouteCollection(points),
+    [points],
+  );
 
   useEffect(() => {
     if (currentLocation) {
@@ -70,6 +144,48 @@ export function MemoryMap({
     );
   };
 
+  const handleMarkerPress = async (event: ShapePressEvent) => {
+    const feature = event.features[0];
+
+    if (!feature) {
+      return;
+    }
+
+    if (feature.properties?.cluster) {
+      const zoomLevel = await markerSourceRef.current?.getClusterExpansionZoom(
+        feature,
+      );
+
+      if (feature.geometry.type === 'Point' && zoomLevel !== undefined) {
+        cameraRef.current?.setCamera({
+          animationDuration: 500,
+          animationMode: 'easeTo',
+          centerCoordinate: feature.geometry.coordinates as [number, number],
+          zoomLevel,
+        });
+      }
+      return;
+    }
+
+    const point = points.find(
+      (candidate) => candidate.id === feature.properties?.pointId,
+    );
+
+    if (point) {
+      cameraRef.current?.setCamera({
+        animationDuration: 550,
+        animationMode: 'easeTo',
+        centerCoordinate: [
+          point.coordinate.longitude,
+          point.coordinate.latitude,
+        ],
+        zoomLevel: 14,
+      });
+      onSelectPoint?.(point);
+      onOpenDiaries(point);
+    }
+  };
+
   if (!accessToken) {
     return (
       <View style={[styles.container, styles.configurationError]}>
@@ -90,38 +206,134 @@ export function MemoryMap({
         rotateEnabled={false}
         scaleBarEnabled={false}
         style={StyleSheet.absoluteFill}
-        styleURL={Mapbox.StyleURL.Street}
+        styleURL={standardStyleURL}
       >
+        <Mapbox.StyleImport
+          config={{ lightPreset }}
+          existing
+          id="basemap"
+        />
         <Mapbox.Camera
           defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: 12.5 }}
           ref={cameraRef}
         />
 
-        {points.map((point) => (
-          <Mapbox.PointAnnotation
-            coordinate={[
-              point.coordinate.longitude,
-              point.coordinate.latitude,
-            ]}
-            id={point.id}
-            key={point.id}
-            onSelected={() => {
-              onSelectPoint(point);
-              onOpenDiaries(point);
+        <Mapbox.Images>
+          {points.map((point) => {
+            const diary = point.diaries[0];
+
+            return (
+              <Mapbox.Image
+                key={point.id}
+                name={`memory-photo-${point.id}`}
+              >
+                <View collapsable={false} style={styles.photoMarkerCanvas}>
+                  <View style={styles.photoFrame}>
+                    {diary?.photoUri ? (
+                      <RNImage
+                        resizeMode="cover"
+                        source={{ uri: diary.photoUri }}
+                        style={styles.photo}
+                      />
+                    ) : (
+                      <View style={styles.photoPlaceholder}>
+                        <Text style={styles.photoPlaceholderText}>사진 없음</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.photoPointer} />
+                </View>
+              </Mapbox.Image>
+            );
+          })}
+        </Mapbox.Images>
+
+        <Mapbox.ShapeSource id="daily-routes" shape={dailyRouteCollection}>
+          <Mapbox.LineLayer
+            id="daily-route-lines"
+            style={{
+              lineCap: 'round',
+              lineColor: colors.accent,
+              lineJoin: 'round',
+              lineOpacity: 0.72,
+              lineWidth: 4,
             }}
-          >
-            <View
-              style={[
-                styles.marker,
-                point.id === selectedPoint.id && styles.markerSelected,
-              ]}
-            >
-              <Text style={styles.markerEmoji}>
-                {point.diaries[0]?.emoji ?? '📍'}
-              </Text>
-            </View>
-          </Mapbox.PointAnnotation>
-        ))}
+          />
+        </Mapbox.ShapeSource>
+
+        <Mapbox.ShapeSource
+          cluster
+          clusterMaxZoomLevel={13}
+          clusterRadius={48}
+          id="memory-markers"
+          onPress={(event) => void handleMarkerPress(event)}
+          ref={markerSourceRef}
+          shape={markerCollection}
+        >
+          <Mapbox.CircleLayer
+            filter={['has', 'point_count']}
+            id="memory-clusters"
+            style={{
+              circleColor: colors.primary,
+              circleRadius: [
+                'step',
+                ['get', 'point_count'],
+                22,
+                10,
+                27,
+                30,
+                32,
+              ],
+              circleStrokeColor: colors.surface,
+              circleStrokeWidth: 3,
+            }}
+          />
+          <Mapbox.SymbolLayer
+            filter={['has', 'point_count']}
+            id="memory-cluster-counts"
+            style={{
+              textAllowOverlap: true,
+              textColor: colors.surface,
+              textField: ['get', 'point_count_abbreviated'],
+              textSize: 13,
+            }}
+          />
+          <Mapbox.CircleLayer
+            filter={['!', ['has', 'point_count']]}
+            id="memory-marker-backgrounds"
+            style={{
+              circleColor: colors.accent,
+              circleOpacity: [
+                'case',
+                ['==', ['get', 'selected'], true],
+                0.24,
+                0,
+              ],
+              circleRadius: [
+                'case',
+                ['==', ['get', 'selected'], true],
+                28,
+                0,
+              ],
+            }}
+          />
+          <Mapbox.SymbolLayer
+            filter={['!', ['has', 'point_count']]}
+            id="memory-marker-photos"
+            style={{
+              iconAllowOverlap: true,
+              iconAnchor: 'bottom',
+              iconIgnorePlacement: true,
+              iconImage: ['get', 'imageName'],
+              iconSize: [
+                'case',
+                ['==', ['get', 'selected'], true],
+                1.08,
+                0.92,
+              ],
+            }}
+          />
+        </Mapbox.ShapeSource>
 
         {currentLocation ? (
           <Mapbox.PointAnnotation
@@ -233,22 +445,47 @@ const styles = StyleSheet.create({
     height: 20,
     width: 20,
   },
-  marker: {
+  photoMarkerCanvas: {
     alignItems: 'center',
+    height: 66,
+    padding: 3,
+    width: 58,
+  },
+  photoFrame: {
     backgroundColor: colors.surface,
-    borderColor: colors.primary,
-    borderRadius: 20,
+    borderColor: colors.surface,
+    borderRadius: 7,
     borderWidth: 3,
-    height: 40,
+    elevation: 5,
+    height: 52,
+    overflow: 'hidden',
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.24,
+    shadowRadius: 4,
+    width: 52,
+  },
+  photo: {
+    height: '100%',
+    width: '100%',
+  },
+  photoPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    flex: 1,
     justifyContent: 'center',
-    width: 40,
   },
-  markerEmoji: {
-    fontSize: 20,
-  },
-  markerSelected: {
-    borderColor: colors.accent,
-    transform: [{ scale: 1.12 }],
+  photoPlaceholderText: { color: colors.textMuted, fontSize: 8 },
+  photoPointer: {
+    borderLeftColor: 'transparent',
+    borderLeftWidth: 7,
+    borderRightColor: 'transparent',
+    borderRightWidth: 7,
+    borderTopColor: colors.surface,
+    borderTopWidth: 10,
+    height: 0,
+    marginTop: -1,
+    width: 0,
   },
   mapBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',

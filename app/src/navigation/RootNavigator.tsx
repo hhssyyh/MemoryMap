@@ -1,19 +1,37 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { StyleSheet, Text } from 'react-native';
 
 import { colors } from '../constants/theme';
 import { DiaryScreen } from '../screens/DiaryScreen';
+import { DiaryDetailScreen } from '../screens/DiaryDetailScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { MapScreen } from '../screens/MapScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { CreateDiaryScreen } from '../screens/CreateDiaryScreen';
+import { EditDiaryScreen } from '../screens/EditDiaryScreen';
+import type { DiaryEntry } from '../types/diary';
+
+export type RootStackParamList = {
+  MainTabs: undefined;
+  DiaryDetail: {
+    diary: DiaryEntry;
+    location: string;
+  };
+  CreateDiary: undefined;
+  EditDiary: { diaryId: string };
+};
 
 export type RootTabParamList = {
+  Home: undefined;
   Map: undefined;
   Diary: undefined;
   Settings: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const navigationTheme = {
   ...DefaultTheme,
@@ -28,6 +46,7 @@ const navigationTheme = {
 };
 
 const tabIcons: Record<keyof RootTabParamList, string> = {
+  Home: '⌂',
   Map: '⌖',
   Diary: '▤',
   Settings: '⚙',
@@ -56,8 +75,32 @@ function TabIcon({ color, focused, routeName }: TabIconProps) {
 export function RootNavigator() {
   return (
     <NavigationContainer theme={navigationTheme}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen component={MainTabs} name="MainTabs" />
+        <Stack.Screen
+          component={CreateDiaryScreen}
+          name="CreateDiary"
+          options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen component={EditDiaryScreen} name="EditDiary" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen
+          component={DiaryDetailScreen}
+          name="DiaryDetail"
+          options={{
+            animation: 'fade',
+            contentStyle: styles.transparentScreen,
+            presentation: 'transparentModal',
+          }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+function MainTabs() {
+  return (
       <Tab.Navigator
-        initialRouteName="Map"
+        initialRouteName="Home"
         screenOptions={({ route }) => ({
           headerShown: false,
           sceneStyle: styles.scene,
@@ -73,6 +116,11 @@ export function RootNavigator() {
       >
         <Tab.Screen
           component={HomeScreen}
+          name="Home"
+          options={{ tabBarLabel: '홈', title: '홈' }}
+        />
+        <Tab.Screen
+          component={MapScreen}
           name="Map"
           options={{ tabBarLabel: '지도', title: '지도' }}
         />
@@ -87,11 +135,13 @@ export function RootNavigator() {
           options={{ tabBarLabel: '설정', title: '설정' }}
         />
       </Tab.Navigator>
-    </NavigationContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  transparentScreen: {
+    backgroundColor: 'transparent',
+  },
   scene: {
     backgroundColor: colors.background,
   },

@@ -2,18 +2,22 @@
 
 ## Current Task
 
-- [ ] Build diary detail screen
+- [x] Connect diary creation to saved locations
 
 ---
 
 ## Next Tasks
 
-- [ ] Connect diary creation to saved locations
+- [ ] Define the next MVP task
 
 ---
 
 ## Completed
 
+- [x] Connect diary creation to saved locations
+- [x] Add time-based map themes, daily visit routes, animated markers, and clustering
+- [x] Build diary detail screen
+- [x] Add a dedicated full-size map tab and rename the existing map tab to Home
 - [x] Replace the temporary map implementation with Mapbox
 - [x] Add current location permission and tracking
 - [x] Build diary list screen
