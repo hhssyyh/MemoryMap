@@ -1,11 +1,15 @@
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
+import { ThemedText as Text } from './ThemedText';
 import * as ImagePicker from 'expo-image-picker';
 
-import { colors, spacing } from '../constants/theme';
+import { spacing, type ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 
 type Props = { photoUri?: string; onChange: (uri: string) => void };
 
 export function DiaryPhotoPicker({ photoUri, onChange }: Props) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const openLibrary = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -39,10 +43,10 @@ export function DiaryPhotoPicker({ photoUri, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   preview: { alignItems: 'center', aspectRatio: 4 / 3, backgroundColor: colors.primarySoft, borderRadius: 18, justifyContent: 'center', overflow: 'hidden', width: '100%' },
   image: { height: '100%', width: '100%' }, empty: { color: colors.textMuted, fontSize: 14 },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  button: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, flex: 1, padding: 12 },
+  button: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, elevation: 2, flex: 1, padding: 12, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6 },
   buttonText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
 });

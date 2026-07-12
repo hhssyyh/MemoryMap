@@ -1,9 +1,10 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet } from 'react-native';
 
-import { colors } from '../constants/theme';
+import type { ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 import { DiaryScreen } from '../screens/DiaryScreen';
 import { DiaryDetailScreen } from '../screens/DiaryDetailScreen';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -12,6 +13,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { CreateDiaryScreen } from '../screens/CreateDiaryScreen';
 import { EditDiaryScreen } from '../screens/EditDiaryScreen';
 import type { DiaryEntry } from '../types/diary';
+import { ThemedText as Text } from '../components/ThemedText';
 
 export type RootStackParamList = {
   MainTabs: undefined;
@@ -33,18 +35,6 @@ export type RootTabParamList = {
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const navigationTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: colors.background,
-    border: colors.border,
-    card: colors.surface,
-    primary: colors.primary,
-    text: colors.text,
-  },
-};
-
 const tabIcons: Record<keyof RootTabParamList, string> = {
   Home: '⌂',
   Map: '⌖',
@@ -59,6 +49,7 @@ type TabIconProps = {
 };
 
 function TabIcon({ color, focused, routeName }: TabIconProps) {
+  const styles = createStyles(useAppTheme().colors);
   return (
     <Text
       style={[
@@ -73,6 +64,20 @@ function TabIcon({ color, focused, routeName }: TabIconProps) {
 }
 
 export function RootNavigator() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+  const navigationTheme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: colors.background,
+      border: colors.border,
+      card: colors.surface,
+      primary: colors.primary,
+      text: colors.text,
+    },
+  };
+
   return (
     <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -87,9 +92,8 @@ export function RootNavigator() {
           component={DiaryDetailScreen}
           name="DiaryDetail"
           options={{
-            animation: 'fade',
-            contentStyle: styles.transparentScreen,
-            presentation: 'transparentModal',
+            animation: 'slide_from_right',
+            presentation: 'card',
           }}
         />
       </Stack.Navigator>
@@ -98,6 +102,9 @@ export function RootNavigator() {
 }
 
 function MainTabs() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   return (
       <Tab.Navigator
         initialRouteName="Home"
@@ -138,17 +145,13 @@ function MainTabs() {
   );
 }
 
-const styles = StyleSheet.create({
-  transparentScreen: {
-    backgroundColor: 'transparent',
-  },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   scene: {
     backgroundColor: colors.background,
   },
   tabBar: {
     backgroundColor: colors.surface,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
+    borderTopWidth: 0,
     elevation: 10,
     shadowColor: colors.text,
     shadowOffset: { width: 0, height: -3 },

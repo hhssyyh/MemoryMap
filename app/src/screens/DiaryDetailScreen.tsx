@@ -1,253 +1,188 @@
-import { useState } from "react";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import {
-  Pressable,
-  Image,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useState } from 'react';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Image, Pressable, ScrollView, Share, StatusBar, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, spacing } from "../constants/theme";
-import { useDiaries } from "../context/DiaryContext";
-import type { RootStackParamList } from "../navigation/RootNavigator";
+import { MemoryMap } from '../components/MemoryMap';
+import { spacing, type ThemeColors } from '../constants/theme';
+import { useDiaries } from '../context/DiaryContext';
+import { useAppTheme } from '../context/ThemeContext';
+import type { RootStackParamList } from '../navigation/RootNavigator';
+import { ThemedText as Text } from '../components/ThemedText';
 
-type DiaryDetailScreenProps = NativeStackScreenProps<
-  RootStackParamList,
-  "DiaryDetail"
->;
+type Props = NativeStackScreenProps<RootStackParamList, 'DiaryDetail'>;
 
-export function DiaryDetailScreen({
-  navigation,
-  route,
-}: DiaryDetailScreenProps) {
+export function DiaryDetailScreen({ navigation, route }: Props) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const { points } = useDiaries();
+  const insets = useSafeAreaInsets();
+  const [liked, setLiked] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [detailFullscreen, setDetailFullscreen] = useState(false);
   const routeDiary = route.params.diary;
   const point = points.find((item) => item.diaries.some((diary) => diary.id === routeDiary.id));
   const diary = point?.diaries.find((item) => item.id === routeDiary.id) ?? routeDiary;
   const location = point?.location ?? route.params.location;
-  const insets = useSafeAreaInsets();
-  const [isExpanded, setIsExpanded] = useState(false);
+
+  const shareDiary = () => Share.share({ message: `${diary.title}\n${location}\n${diary.summary}` });
 
   return (
-    <View
-      style={[
-        styles.overlay,
-        isExpanded && styles.overlayExpanded,
-        {
-          paddingBottom: isExpanded
-            ? insets.bottom
-            : insets.bottom + spacing.lg,
-          paddingTop: isExpanded ? insets.top : insets.top + spacing.lg,
-        },
-      ]}
-    >
-      <StatusBar
-        backgroundColor="transparent"
-        barStyle="dark-content"
-        translucent
-      />
-      {!isExpanded ? (
-        <Pressable
-          accessibilityLabel="기록 상세 닫기"
-          onPress={navigation.goBack}
-          style={StyleSheet.absoluteFill}
-        />
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      {!detailFullscreen ? (
+        <View style={styles.mapHeader}>
+          {point ? (
+            <MemoryMap
+              compact
+              currentLocation={null}
+              expanded
+              focusCoordinate={point.coordinate}
+              highlightedPointId={point.id}
+              isLocating={false}
+              onRequestLocation={async () => undefined}
+              points={points}
+            />
+          ) : (
+            <View style={styles.mapFallback} />
+          )}
+        </View>
       ) : null}
 
-      <View style={[styles.card, isExpanded && styles.cardExpanded]}>
-        <View style={styles.header}>
-          <Pressable
-            accessibilityLabel="기록 상세 닫기"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={navigation.goBack}
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed && styles.buttonPressed,
-            ]}
-          >
-            <Text style={styles.closeIcon}>×</Text>
+      <View style={[styles.topActions, { top: insets.top + spacing.sm }]}>
+        <Pressable accessibilityLabel="뒤로 가기" onPress={navigation.goBack} style={styles.roundButton}>
+          <Text style={styles.backIcon}>‹</Text>
+        </Pressable>
+        <View style={styles.topActionGroup}>
+          <Pressable accessibilityLabel="기록 공유" onPress={() => void shareDiary()} style={styles.roundButton}>
+            <Text style={styles.topIcon}>↥</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>기록</Text>
-          <View style={styles.headerActions}>
-            <Pressable
-              accessibilityLabel="기록 수정"
-              accessibilityRole="button"
-              hitSlop={8}
-              onPress={() => navigation.navigate("EditDiary", { diaryId: diary.id })}
-              style={({ pressed }) => [styles.editButton, pressed && styles.buttonPressed]}
-            >
-              <Text style={styles.editText}>수정</Text>
-            </Pressable>
-            <Pressable
-            accessibilityLabel={
-              isExpanded ? "팝업 크기로 축소" : "전체화면으로 확대"
-            }
+          <Pressable
+            accessibilityLabel={detailFullscreen ? '상세 팝업 축소' : '상세 팝업 전체화면으로 보기'}
             accessibilityRole="button"
-            hitSlop={8}
-            onPress={() => setIsExpanded((expanded) => !expanded)}
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed && styles.buttonPressed,
-            ]}
+            onPress={() => setDetailFullscreen((value) => !value)}
+            style={styles.roundButton}
           >
-            <Text style={styles.expandIcon}>{isExpanded ? "⊡" : "⛶"}</Text>
+            <Text style={styles.topIcon}>{detailFullscreen ? '⊡' : '⛶'}</Text>
+          </Pressable>
+          <Pressable accessibilityLabel="기록 수정" onPress={() => navigation.navigate('EditDiary', { diaryId: diary.id })} style={styles.roundButton}>
+            <Text style={styles.topIcon}>•••</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={[styles.sheet, detailFullscreen && styles.sheetFullscreen]}>
+        <View style={styles.handle} />
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingBottom: insets.bottom + spacing.xl,
+              paddingTop: detailFullscreen ? insets.top + 74 : spacing.lg,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.location}>⌖  {location}</Text>
+          <Text style={styles.title}>{diary.title}</Text>
+
+          <View style={styles.quoteCard}>
+            <Text style={styles.quoteMark}>“</Text>
+            <Text style={styles.quote}>{diary.summary}</Text>
+          </View>
+
+          <View style={styles.photoContainer}>
+            {diary.photoUri ? (
+              <Image resizeMode="cover" source={{ uri: diary.photoUri }} style={styles.photo} />
+            ) : (
+              <Text style={styles.photoEmpty}>사진 없음</Text>
+            )}
+            <View style={styles.photoCount}><Text style={styles.photoCountText}>1 / 1</Text></View>
+          </View>
+
+          <View style={styles.metaSection}>
+            <View style={styles.metaRow}><Text style={styles.metaIcon}>□</Text><Text style={styles.metaText}>{diary.date}</Text></View>
+            <View style={styles.metaRow}><Text style={styles.metaIcon}>⌖</Text><Text style={styles.metaText}>{location}</Text></View>
+          </View>
+
+          <View style={styles.actionRow}>
+            <Pressable onPress={() => setLiked((value) => !value)} style={[styles.actionButton, liked && styles.actionButtonActive]}>
+              <Text style={[styles.actionIcon, liked && styles.actionTextActive]}>{liked ? '♥' : '♡'}</Text>
+              <Text style={[styles.actionText, liked && styles.actionTextActive]}>{liked ? '저장됨' : '보관함에 저장'}</Text>
+            </Pressable>
+            {/* <Pressable onPress={() => setSaved((value) => !value)} style={[styles.actionButton, saved && styles.actionButtonActive]}>
+              <Text style={[styles.actionIcon, saved && styles.actionTextActive]}>♧</Text>
+              <Text style={[styles.actionText, saved && styles.actionTextActive]}>{saved ? '저장됨' : '보관함에 저장'}</Text>
+            </Pressable> */}
+            <Pressable onPress={() => setSaved((value) => !value)} style={[styles.actionButton, saved && styles.actionButtonActive]}>
+              <Text style={[styles.actionIcon]}>♧</Text>
+              <Text style={[styles.actionText]}>삭제</Text>
+            </Pressable>
+            <Pressable onPress={() => void shareDiary()} style={styles.actionButton}>
+              <Text style={styles.actionIcon}>↥</Text><Text style={styles.actionText}>공유하기</Text>
             </Pressable>
           </View>
-        </View>
 
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-          style={styles.scrollView}
-        >
-          <View style={styles.photoContainer}>
-            {diary.photoUri ? <Image source={{ uri: diary.photoUri }} style={styles.photo} /> : <Text style={styles.photoEmpty}>사진 없음</Text>}
+          <View style={styles.memoSection}>
+            <View style={styles.sectionTitleRow}><Text style={styles.sectionIcon}>✿</Text><Text style={styles.sectionTitle}>기록 메모</Text></View>
+            <Text style={styles.memo}>{diary.summary}</Text>
           </View>
-          <Text style={styles.location}>{location}</Text>
-          <Text style={styles.title}>{diary.title}</Text>
-          <Text style={styles.date}>{diary.date}</Text>
 
-          <View style={styles.divider} />
-
-          <Text style={styles.body}>{diary.summary}</Text>
+          <View style={styles.tagSection}>
+            <Text style={styles.sectionTitle}>태그</Text>
+            <View style={styles.tags}>
+              <View style={styles.tag}><Text style={styles.tagText}>#{location.replace(/\s/g, '')}</Text></View>
+              <View style={styles.tag}><Text style={styles.tagText}>#추억</Text></View>
+              <View style={styles.tag}><Text style={styles.tagText}>#여행일기</Text></View>
+            </View>
+          </View>
         </ScrollView>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    alignItems: "center",
-    backgroundColor: "rgba(24, 35, 30, 0.42)",
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: spacing.md,
-  },
-  overlayExpanded: {
-    backgroundColor: colors.background,
-    paddingHorizontal: 0,
-  },
-  card: {
-    backgroundColor: colors.background,
-    borderRadius: 26,
-    elevation: 18,
-    height: "60%",
-    overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.24,
-    shadowRadius: 18,
-    width: "100%",
-  },
-  cardExpanded: {
-    borderRadius: 0,
-    flex: 1,
-    height: "100%",
-  },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  headerButton: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 20,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  headerActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.xs,
-  },
-  editButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  editText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  closeIcon: {
-    color: colors.text,
-    fontSize: 27,
-    lineHeight: 29,
-  },
-  buttonPressed: {
-    opacity: 0.65,
-  },
-  headerTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  expandIcon: {
-    color: colors.primary,
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  content: {
-    alignItems: "center",
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
-    paddingTop: spacing.lg,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  photoContainer: {
-    alignItems: "center",
-    backgroundColor: colors.primarySoft,
-    borderRadius: 20,
-    height: 220,
-    justifyContent: "center",
-    marginBottom: spacing.lg,
-    overflow: "hidden",
-    width: "100%",
-  },
-  photo: { height: "100%", width: "100%" },
-  photoEmpty: { color: colors.textMuted, fontSize: 14 },
-  location: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  title: {
-    color: colors.text,
-    fontSize: 25,
-    fontWeight: "800",
-    letterSpacing: -0.8,
-    marginTop: spacing.sm,
-    textAlign: "center",
-  },
-  date: {
-    color: colors.textMuted,
-    fontSize: 13,
-    marginTop: spacing.sm,
-  },
-  divider: {
-    backgroundColor: colors.border,
-    height: 1,
-    marginVertical: spacing.xl,
-    width: "100%",
-  },
-  body: {
-    alignSelf: "stretch",
-    color: colors.text,
-    fontSize: 17,
-    lineHeight: 29,
-  },
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  screen: { backgroundColor: colors.map, flex: 1 },
+  mapHeader: { height: '31%', minHeight: 230 },
+  mapFallback: { backgroundColor: colors.map, flex: 1 },
+  topActions: { flexDirection: 'row', justifyContent: 'space-between', left: spacing.md, position: 'absolute', right: spacing.md, zIndex: 5 },
+  topActionGroup: { flexDirection: 'row', gap: spacing.sm },
+  roundButton: { alignItems: 'center', backgroundColor: 'rgba(255, 253, 249, 0.86)', borderRadius: 20, elevation: 4, height: 46, justifyContent: 'center', shadowColor: colors.text, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 8, width: 46 },
+  backIcon: { color: colors.text, fontSize: 36, lineHeight: 38 },
+  topIcon: { color: colors.text, fontSize: 20, lineHeight: 22 },
+  sheet: { backgroundColor: colors.background, borderTopLeftRadius: 30, borderTopRightRadius: 30, flex: 1, marginTop: -28, overflow: 'hidden' },
+  sheetFullscreen: { borderTopLeftRadius: 0, borderTopRightRadius: 0, marginTop: 0 },
+  handle: { alignSelf: 'center', backgroundColor: colors.border, borderRadius: 3, height: 5, marginTop: spacing.sm, width: 48 },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
+  location: { color: colors.primary, fontSize: 13, fontWeight: '700' },
+  title: { color: colors.text, fontSize: 31, fontWeight: '800', letterSpacing: -0.8, marginTop: spacing.md },
+  quoteCard: { flexDirection: 'row', marginVertical: spacing.lg },
+  quoteMark: { color: colors.primary, fontSize: 34, lineHeight: 30, marginRight: spacing.sm, opacity: 0.65 },
+  quote: { color: colors.text, flex: 1, fontSize: 16, lineHeight: 26 },
+  photoContainer: { alignItems: 'center', aspectRatio: 4 / 3, backgroundColor: colors.primarySoft, borderRadius: 24, justifyContent: 'center', overflow: 'hidden', position: 'relative', width: '100%' },
+  photo: { height: '100%', width: '100%' },
+  photoEmpty: { color: colors.textMuted },
+  photoCount: { backgroundColor: 'rgba(255,253,249,0.88)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, position: 'absolute', right: 12, top: 12 },
+  photoCountText: { color: colors.text, fontSize: 12 },
+  metaSection: { gap: 12, paddingVertical: spacing.lg },
+  metaRow: { alignItems: 'center', flexDirection: 'row' },
+  metaIcon: { color: colors.primary, fontSize: 17, width: 30 },
+  metaText: { color: colors.textMuted, flex: 1, fontSize: 14 },
+  actionRow: { flexDirection: 'row', gap: spacing.sm },
+  actionButton: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 18, elevation: 2, flex: 1, justifyContent: 'center', minHeight: 68, paddingHorizontal: spacing.xs, shadowColor: colors.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 8 },
+  actionButtonActive: { backgroundColor: colors.primarySoft },
+  actionIcon: { color: colors.textMuted, fontSize: 22 },
+  actionText: { color: colors.text, fontSize: 11, marginTop: 4, textAlign: 'center' },
+  actionTextActive: { color: colors.primary },
+  memoSection: { marginTop: spacing.xl },
+  sectionTitleRow: { alignItems: 'center', flexDirection: 'row' },
+  sectionIcon: { color: colors.primary, fontSize: 19, marginRight: spacing.sm },
+  sectionTitle: { color: colors.text, fontSize: 17, fontWeight: '800' },
+  memo: { color: colors.text, fontSize: 15, lineHeight: 26, marginTop: spacing.md },
+  tagSection: { marginTop: spacing.xl },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  tag: { backgroundColor: colors.primarySoft, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9 },
+  tagText: { color: colors.textMuted, fontSize: 12 },
 });

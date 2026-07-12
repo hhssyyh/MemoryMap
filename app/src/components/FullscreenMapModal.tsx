@@ -1,7 +1,9 @@
-import { Modal, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StatusBar, StyleSheet, View } from 'react-native';
+import { ThemedText as Text } from './ThemedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors } from '../constants/theme';
+import type { ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 import type { DiaryPoint } from '../types/diary';
 import type { CurrentCoordinate } from '../hooks/useCurrentLocation';
 import { MemoryMap } from './MemoryMap';
@@ -12,7 +14,7 @@ type FullscreenMapModalProps = {
   visible: boolean;
   onClose: () => void;
   onOpenDiaries: (point: DiaryPoint) => void;
-  onSelectPoint: (point: DiaryPoint) => void;
+  onSelectPoint?: (point: DiaryPoint) => void;
   currentLocation: CurrentCoordinate | null;
   isLocating: boolean;
   onRequestLocation: () => Promise<void>;
@@ -29,6 +31,8 @@ export function FullscreenMapModal({
   isLocating,
   onRequestLocation,
 }: FullscreenMapModalProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const insets = useSafeAreaInsets();
 
   return (
@@ -69,14 +73,14 @@ export function FullscreenMapModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
   },
   closeButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: 'rgba(255, 253, 249, 0.82)',
     borderRadius: 20,
     elevation: 5,
     height: 40,

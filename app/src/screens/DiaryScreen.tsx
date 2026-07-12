@@ -1,13 +1,17 @@
-import { FlatList, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StatusBar, StyleSheet, View } from 'react-native';
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DiaryListItem } from '../components/DiaryListItem';
-import { colors, spacing } from '../constants/theme';
+import { spacing, type ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 import { useDiaries } from '../context/DiaryContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { ThemedText as Text } from '../components/ThemedText';
 
 export function DiaryScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { points } = useDiaries();
@@ -26,7 +30,7 @@ export function DiaryScreen() {
       <FlatList
         contentContainerStyle={styles.listContent}
         data={diaryItems}
-        ItemSeparatorComponent={ItemSeparator}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         keyExtractor={({ diary }) => diary.id}
         renderItem={({ item }) => (
           <DiaryListItem
@@ -49,11 +53,7 @@ export function DiaryScreen() {
   );
 }
 
-function ItemSeparator() {
-  return <View style={styles.separator} />;
-}
-
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,

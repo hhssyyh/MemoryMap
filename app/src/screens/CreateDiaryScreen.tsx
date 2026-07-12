@@ -6,20 +6,23 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, spacing } from '../constants/theme';
+import { spacing, type ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 import { DiaryPhotoPicker } from '../components/DiaryPhotoPicker';
 import { useDiaries } from '../context/DiaryContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { ThemedText as Text } from '../components/ThemedText';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateDiary'>;
 
 export function CreateDiaryScreen({ navigation }: Props) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const { addDiary, points } = useDiaries();
   const [pointId, setPointId] = useState(points[0]?.id ?? '');
   const [title, setTitle] = useState('');
@@ -81,7 +84,7 @@ export function CreateDiaryScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { backgroundColor: colors.background, flex: 1 },
   header: { alignItems: 'center', borderBottomColor: colors.border, borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', padding: spacing.md },
   headerTitle: { color: colors.text, fontSize: 17, fontWeight: '800' },
@@ -90,10 +93,10 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg },
   label: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: spacing.sm, marginTop: spacing.md },
   locations: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  locationChip: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 9 },
-  locationChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  locationChip: { backgroundColor: colors.surface, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9 },
+  locationChipSelected: { backgroundColor: colors.primary },
   locationText: { color: colors.text, fontWeight: '600' },
   locationTextSelected: { color: colors.surface },
-  input: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, color: colors.text, fontSize: 16, padding: spacing.md },
+  input: { backgroundColor: colors.surface, borderRadius: 14, color: colors.text, elevation: 1, fontFamily: colors.fontFamily, fontSize: 16, padding: spacing.md, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 },
   summary: { minHeight: 150 },
 });

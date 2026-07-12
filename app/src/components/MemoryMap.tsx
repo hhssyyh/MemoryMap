@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { Image as RNImage, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Image as RNImage, Pressable, StyleSheet, View } from 'react-native';
 import * as Mapbox from '@rnmapbox/maps';
 
-import { colors } from '../constants/theme';
+import type { ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 import type { CurrentCoordinate } from '../hooks/useCurrentLocation';
-import { useMapLightPreset } from '../hooks/useMapLightPreset';
 import type { DiaryPoint } from '../types/diary';
+import { ThemedText as Text } from './ThemedText';
 
 type MemoryMapProps = {
   points: DiaryPoint[];
+  compact?: boolean;
+  focusCoordinate?: CurrentCoordinate;
   highlightedPointId?: string;
   onSelectPoint?: (point: DiaryPoint) => void;
-  onOpenDiaries: (point: DiaryPoint) => void;
+  onOpenDiaries?: (point: DiaryPoint) => void;
   expanded?: boolean;
   onExpand?: () => void;
   topInset?: number;
@@ -21,11 +24,29 @@ type MemoryMapProps = {
 };
 
 const initialCenter: [number, number] = [127.053, 37.5385];
-const standardStyleURL = 'mapbox://styles/mapbox/standard';
 const accessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
+const defaultMapStyleURL = 'mapbox://styles/mapbox/standard';
+
+function resolveMapStyleURL(themeName: string): string {
+  const themeStyleURL =
+    themeName === 'parisDusk'
+      ? process.env.EXPO_PUBLIC_MAPBOX_STYLE_URL_PARIS_DUSK
+      : themeName === 'memory'
+        ? process.env.EXPO_PUBLIC_MAPBOX_STYLE_URL_MEMORY
+        : themeName === 'forest'
+          ? process.env.EXPO_PUBLIC_MAPBOX_STYLE_URL_FOREST
+          : undefined;
+
+  return (
+    themeStyleURL?.trim() ||
+    process.env.EXPO_PUBLIC_MAPBOX_STYLE_URL?.trim() ||
+    defaultMapStyleURL
+  );
+}
 
 type MarkerProperties = {
   imageName: string;
+  location: string;
   pointId: string;
   selected: boolean;
 };
@@ -49,6 +70,7 @@ function createMarkerCollection(
       },
       properties: {
         imageName: `memory-photo-${point.id}`,
+        location: point.location,
         pointId: point.id,
         selected: point.id === selectedPointId,
       },
@@ -92,6 +114,8 @@ if (accessToken) {
 
 export function MemoryMap({
   points,
+  compact = false,
+  focusCoordinate,
   highlightedPointId,
   onSelectPoint,
   onOpenDiaries,
@@ -102,17 +126,52 @@ export function MemoryMap({
   isLocating,
   onRequestLocation,
 }: MemoryMapProps) {
+  const { colors, themeName } = useAppTheme();
+  const styles = createStyles(colors);
+  const styleURL = resolveMapStyleURL(themeName);
   const cameraRef = useRef<Mapbox.Camera>(null);
   const markerSourceRef = useRef<Mapbox.ShapeSource>(null);
-  const lightPreset = useMapLightPreset();
+  const previousHighlightedPointIdRef = useRef<string | undefined>(undefined);
+  const markerScaleRef = useRef(1);
+  const [markerScale, setMarkerScale] = useState(1);
+  const [visualHighlightedPointId, setVisualHighlightedPointId] = useState<string>();
   const markerCollection = useMemo(
-    () => createMarkerCollection(points, highlightedPointId ?? ''),
-    [highlightedPointId, points],
+    () => createMarkerCollection(points, visualHighlightedPointId ?? ''),
+    [points, visualHighlightedPointId],
   );
   const dailyRouteCollection = useMemo(
     () => createDailyRouteCollection(points),
     [points],
   );
+
+  useEffect(() => {
+    if (highlightedPointId) {
+      setVisualHighlightedPointId(highlightedPointId);
+    }
+
+    const from = markerScaleRef.current;
+    const to = highlightedPointId ? 1.1 : 1;
+    const startedAt = Date.now();
+    const duration = 220;
+    let animationFrame: number;
+
+    const animate = () => {
+      const progress = Math.min((Date.now() - startedAt) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const nextScale = from + (to - from) * eased;
+      markerScaleRef.current = nextScale;
+      setMarkerScale(nextScale);
+
+      if (progress < 1) {
+        animationFrame = requestAnimationFrame(animate);
+      } else if (!highlightedPointId) {
+        setVisualHighlightedPointId(undefined);
+      }
+    };
+
+    animationFrame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [highlightedPointId]);
 
   useEffect(() => {
     if (currentLocation) {
@@ -127,6 +186,16 @@ export function MemoryMap({
       });
     }
   }, [currentLocation]);
+
+  useEffect(() => {
+    if (!focusCoordinate) return;
+
+    cameraRef.current?.setCamera({
+      animationDuration: 0,
+      centerCoordinate: [focusCoordinate.longitude, focusCoordinate.latitude],
+      zoomLevel: 13,
+    });
+  }, [focusCoordinate]);
 
   const fitAllPoints = () => {
     if (points.length === 0) {
@@ -143,6 +212,14 @@ export function MemoryMap({
       600,
     );
   };
+
+  useEffect(() => {
+    if (previousHighlightedPointIdRef.current && !highlightedPointId) {
+      fitAllPoints();
+    }
+
+    previousHighlightedPointIdRef.current = highlightedPointId;
+  }, [highlightedPointId]);
 
   const handleMarkerPress = async (event: ShapePressEvent) => {
     const feature = event.features[0];
@@ -179,10 +256,16 @@ export function MemoryMap({
           point.coordinate.longitude,
           point.coordinate.latitude,
         ],
-        zoomLevel: 14,
+        zoomLevel: 13.4,
+        padding: {
+          paddingBottom: expanded ? 300 : 170,
+          paddingLeft: 36,
+          paddingRight: 36,
+          paddingTop: 72,
+        },
       });
       onSelectPoint?.(point);
-      onOpenDiaries(point);
+      onOpenDiaries?.(point);
     }
   };
 
@@ -202,17 +285,14 @@ export function MemoryMap({
       <Mapbox.MapView
         compassEnabled={false}
         logoEnabled
-        pitchEnabled={false}
+        pitchEnabled={!compact && false}
         rotateEnabled={false}
         scaleBarEnabled={false}
+        scrollEnabled={!compact}
         style={StyleSheet.absoluteFill}
-        styleURL={standardStyleURL}
+        styleURL={styleURL}
+        zoomEnabled={!compact}
       >
-        <Mapbox.StyleImport
-          config={{ lightPreset }}
-          existing
-          id="basemap"
-        />
         <Mapbox.Camera
           defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: 12.5 }}
           ref={cameraRef}
@@ -253,7 +333,7 @@ export function MemoryMap({
             id="daily-route-lines"
             style={{
               lineCap: 'round',
-              lineColor: colors.accent,
+              lineColor: '#D9A5AD',
               lineJoin: 'round',
               lineOpacity: 0.72,
               lineWidth: 4,
@@ -274,7 +354,7 @@ export function MemoryMap({
             filter={['has', 'point_count']}
             id="memory-clusters"
             style={{
-              circleColor: colors.primary,
+              circleColor: '#D8CFE3',
               circleRadius: [
                 'step',
                 ['get', 'point_count'],
@@ -284,8 +364,8 @@ export function MemoryMap({
                 30,
                 32,
               ],
-              circleStrokeColor: colors.surface,
-              circleStrokeWidth: 3,
+              circleStrokeColor: '#FFF8EE',
+              circleStrokeWidth: 4,
             }}
           />
           <Mapbox.SymbolLayer
@@ -293,26 +373,26 @@ export function MemoryMap({
             id="memory-cluster-counts"
             style={{
               textAllowOverlap: true,
-              textColor: colors.surface,
-              textField: ['get', 'point_count_abbreviated'],
-              textSize: 13,
+              textColor: '#51485D',
+              textField: ['concat', ['get', 'point_count_abbreviated'], '\nmemories'],
+              textSize: 10,
             }}
           />
           <Mapbox.CircleLayer
             filter={['!', ['has', 'point_count']]}
             id="memory-marker-backgrounds"
             style={{
-              circleColor: colors.accent,
+              circleColor: '#FFD8E0',
               circleOpacity: [
                 'case',
                 ['==', ['get', 'selected'], true],
-                0.24,
+                0.32,
                 0,
               ],
               circleRadius: [
                 'case',
                 ['==', ['get', 'selected'], true],
-                28,
+                35,
                 0,
               ],
             }}
@@ -325,12 +405,27 @@ export function MemoryMap({
               iconAnchor: 'bottom',
               iconIgnorePlacement: true,
               iconImage: ['get', 'imageName'],
+              iconOpacity: visualHighlightedPointId
+                ? ['case', ['==', ['get', 'selected'], true], 1, 0.35]
+                : 1,
               iconSize: [
                 'case',
                 ['==', ['get', 'selected'], true],
-                1.08,
-                0.92,
+                markerScale,
+                1,
               ],
+            }}
+          />
+          <Mapbox.SymbolLayer
+            filter={['==', ['get', 'selected'], true]}
+            id="memory-marker-selected-label"
+            style={{
+              textColor: '#51485D',
+              textField: ['get', 'location'],
+              textHaloColor: '#FFF8EE',
+              textHaloWidth: 2,
+              textOffset: [0, 1.2],
+              textSize: 12,
             }}
           />
         </Mapbox.ShapeSource>
@@ -345,12 +440,14 @@ export function MemoryMap({
         ) : null}
       </Mapbox.MapView>
 
-      <View
+      <View pointerEvents="none" style={styles.mapTextureWash} />
+
+      {!compact ? <View
         pointerEvents="none"
         style={[styles.mapBadge, { top: 14 + topInset }]}
       >
         <Text style={styles.mapBadgeText}>{points.length} MEMORIES</Text>
-      </View>
+      </View> : null}
 
       {onExpand ? (
         <Pressable
@@ -367,7 +464,7 @@ export function MemoryMap({
         </Pressable>
       ) : null}
 
-      <Pressable
+      {!compact ? <Pressable
         accessibilityLabel="현재 위치로 이동"
         accessibilityRole="button"
         disabled={isLocating}
@@ -378,9 +475,9 @@ export function MemoryMap({
         ]}
       >
         <Text style={styles.locationButtonIcon}>{isLocating ? '…' : '◎'}</Text>
-      </Pressable>
+      </Pressable> : null}
 
-      <Pressable
+      {!compact ? <Pressable
         accessibilityLabel="모든 추억 위치 보기"
         accessibilityRole="button"
         onPress={fitAllPoints}
@@ -390,14 +487,14 @@ export function MemoryMap({
         ]}
       >
         <Text style={styles.fitButtonIcon}>⌖</Text>
-      </Pressable>
+      </Pressable> : null}
     </View>
   );
 }
 
-const controlButton = {
+const controlButton = (colors: ThemeColors) => ({
   alignItems: 'center',
-  backgroundColor: colors.surface,
+  backgroundColor: 'rgba(255, 253, 249, 0.82)',
   elevation: 4,
   justifyContent: 'center',
   position: 'absolute',
@@ -406,9 +503,9 @@ const controlButton = {
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.16,
   shadowRadius: 4,
-} as const;
+} as const);
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     backgroundColor: colors.map,
     borderRadius: 28,
@@ -447,23 +544,23 @@ const styles = StyleSheet.create({
   },
   photoMarkerCanvas: {
     alignItems: 'center',
-    height: 66,
-    padding: 3,
-    width: 58,
+    height: 76,
+    padding: 4,
+    width: 68,
   },
   photoFrame: {
-    backgroundColor: colors.surface,
-    borderColor: colors.surface,
-    borderRadius: 7,
+    backgroundColor: '#FFF9FC',
+    borderColor: '#FFFFFF',
+    borderRadius: 32,
     borderWidth: 3,
     elevation: 5,
-    height: 52,
+    height: 60,
     overflow: 'hidden',
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#55445D',
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.24,
-    shadowRadius: 4,
-    width: 52,
+    shadowRadius: 7,
+    width: 60,
   },
   photo: {
     height: '100%',
@@ -477,18 +574,20 @@ const styles = StyleSheet.create({
   },
   photoPlaceholderText: { color: colors.textMuted, fontSize: 8 },
   photoPointer: {
-    borderLeftColor: 'transparent',
-    borderLeftWidth: 7,
-    borderRightColor: 'transparent',
-    borderRightWidth: 7,
-    borderTopColor: colors.surface,
-    borderTopWidth: 10,
-    height: 0,
-    marginTop: -1,
-    width: 0,
+    backgroundColor: colors.primary,
+    borderColor: '#FFFFFF',
+    borderRadius: 7,
+    borderWidth: 2,
+    height: 14,
+    marginTop: -2,
+    width: 14,
+  },
+  mapTextureWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(246, 240, 232, 0.05)',
   },
   mapBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 253, 249, 0.78)',
     borderRadius: 8,
     left: 14,
     paddingHorizontal: 9,
@@ -502,21 +601,21 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   fitButton: {
-    ...controlButton,
+    ...controlButton(colors),
     borderRadius: 22,
     bottom: 18,
     height: 44,
     width: 44,
   },
   locationButton: {
-    ...controlButton,
+    ...controlButton(colors),
     borderRadius: 22,
     bottom: 70,
     height: 44,
     width: 44,
   },
   expandButton: {
-    ...controlButton,
+    ...controlButton(colors),
     borderRadius: 20,
     height: 40,
     right: 14,

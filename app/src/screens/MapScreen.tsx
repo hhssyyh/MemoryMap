@@ -3,17 +3,21 @@ import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DiaryListModal } from '../components/DiaryListModal';
+import { MemoryBottomSheet } from '../components/MemoryBottomSheet';
 import { MemoryMap } from '../components/MemoryMap';
-import { colors } from '../constants/theme';
+import type { ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 import { useDiaries } from '../context/DiaryContext';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { DiaryPoint } from '../types/diary';
 
 export function MapScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const { points } = useDiaries();
   const [diaryListPoint, setDiaryListPoint] = useState<DiaryPoint | null>(null);
+  const [highlightedPointId, setHighlightedPointId] = useState<string>();
   const currentLocation = useCurrentLocation();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
@@ -28,15 +32,21 @@ export function MapScreen() {
       <MemoryMap
         currentLocation={currentLocation.coordinate}
         expanded
-        highlightedPointId={diaryListPoint?.id}
+        highlightedPointId={highlightedPointId}
         isLocating={currentLocation.isLocating}
-        onOpenDiaries={setDiaryListPoint}
+        onOpenDiaries={(point) => {
+          setHighlightedPointId(point.id);
+          setDiaryListPoint(point);
+        }}
         onRequestLocation={currentLocation.requestLocation}
         points={points}
         topInset={insets.top}
       />
-      <DiaryListModal
-        onClose={() => setDiaryListPoint(null)}
+      <MemoryBottomSheet
+        onClose={() => {
+          setDiaryListPoint(null);
+          setHighlightedPointId(undefined);
+        }}
         onOpenDiary={(diary, location) => {
           setDiaryListPoint(null);
           navigation.navigate('DiaryDetail', { diary, location });
@@ -47,7 +57,7 @@ export function MapScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: {
     backgroundColor: colors.map,
     flex: 1,

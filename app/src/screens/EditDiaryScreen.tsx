@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Alert, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StatusBar, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, spacing } from '../constants/theme';
+import { spacing, type ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 import { DiaryPhotoPicker } from '../components/DiaryPhotoPicker';
 import { useDiaries } from '../context/DiaryContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { ThemedText as Text } from '../components/ThemedText';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditDiary'>;
 
 export function EditDiaryScreen({ navigation, route }: Props) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const { points, updateDiary } = useDiaries();
   const sourcePoint = points.find((point) => point.diaries.some((diary) => diary.id === route.params.diaryId));
   const diary = sourcePoint?.diaries.find((item) => item.id === route.params.diaryId);
@@ -57,11 +61,11 @@ export function EditDiaryScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { backgroundColor: colors.background, flex: 1 }, missing: { color: colors.textMuted, margin: spacing.xl, textAlign: 'center' },
   header: { alignItems: 'center', borderBottomColor: colors.border, borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', padding: spacing.md },
   headerTitle: { color: colors.text, fontSize: 17, fontWeight: '800' }, cancel: { color: colors.textMuted, fontSize: 15 }, save: { color: colors.primary, fontSize: 15, fontWeight: '800' },
   content: { padding: spacing.lg }, label: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: spacing.sm, marginTop: spacing.md }, locations: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  locationChip: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 9 }, locationChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary }, locationText: { color: colors.text, fontWeight: '600' }, locationTextSelected: { color: colors.surface },
-  input: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, color: colors.text, fontSize: 16, padding: spacing.md }, summary: { minHeight: 150 },
+  locationChip: { backgroundColor: colors.surface, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9 }, locationChipSelected: { backgroundColor: colors.primary }, locationText: { color: colors.text, fontWeight: '600' }, locationTextSelected: { color: colors.surface },
+  input: { backgroundColor: colors.surface, borderRadius: 14, color: colors.text, elevation: 1, fontFamily: colors.fontFamily, fontSize: 16, padding: spacing.md, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 }, summary: { minHeight: 150 },
 });
