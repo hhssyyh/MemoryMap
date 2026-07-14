@@ -7,6 +7,7 @@ import type { ThemeColors } from '../constants/theme';
 import { useAppTheme } from '../context/ThemeContext';
 import { DiaryScreen } from '../screens/DiaryScreen';
 import { DiaryDetailScreen } from '../screens/DiaryDetailScreen';
+import { Home2Screen } from '../screens/Home2Screen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { MapScreen } from '../screens/MapScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -27,6 +28,7 @@ export type RootStackParamList = {
 
 export type RootTabParamList = {
   Home: undefined;
+  Home2: undefined;
   Map: undefined;
   Diary: undefined;
   Settings: undefined;
@@ -37,6 +39,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const tabIcons: Record<keyof RootTabParamList, string> = {
   Home: '⌂',
+  Home2: '◇',
   Map: '⌖',
   Diary: '▤',
   Settings: '⚙',
@@ -125,6 +128,11 @@ function MainTabs() {
           component={HomeScreen}
           name="Home"
           options={{ tabBarLabel: '홈', title: '홈' }}
+        />
+        <Tab.Screen
+          component={Home2Screen}
+          name="Home2"
+          options={{ tabBarLabel: '홈2', title: '홈2' }}
         />
         <Tab.Screen
           component={MapScreen}
