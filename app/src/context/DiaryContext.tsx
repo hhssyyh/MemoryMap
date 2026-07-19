@@ -10,6 +10,8 @@ type DiaryContextValue = {
   points: DiaryPoint[];
   addDiary: (diary: NewDiary) => void;
   updateDiary: (diary: DiaryUpdate) => void;
+  deleteDiary: (diaryId: string) => void;
+  toggleDiarySaved: (diaryId: string) => void;
 };
 
 const DiaryContext = createContext<DiaryContextValue | null>(null);
@@ -42,6 +44,24 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
               : point.diaries.filter((item) => item.id !== diaryId),
           }));
         });
+      },
+      deleteDiary: (diaryId) => {
+        setPoints((current) =>
+          current.map((point) => ({
+            ...point,
+            diaries: point.diaries.filter((diary) => diary.id !== diaryId),
+          })),
+        );
+      },
+      toggleDiarySaved: (diaryId) => {
+        setPoints((current) =>
+          current.map((point) => ({
+            ...point,
+            diaries: point.diaries.map((diary) =>
+              diary.id === diaryId ? { ...diary, isSaved: !diary.isSaved } : diary,
+            ),
+          })),
+        );
       },
     }),
     [points],

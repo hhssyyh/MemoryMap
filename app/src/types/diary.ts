@@ -4,6 +4,12 @@ export type DiaryEntry = {
   date: string;
   summary: string;
   photoUri?: string;
+  photoUris?: string[];
+  tags?: string[];
+  weather?: string;
+  temperature?: string;
+  time?: string;
+  isSaved?: boolean;
 };
 
 export type DiaryPoint = {

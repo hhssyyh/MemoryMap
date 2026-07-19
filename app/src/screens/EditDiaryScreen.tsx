@@ -31,7 +31,7 @@ export function EditDiaryScreen({ navigation, route }: Props) {
       Alert.alert('내용을 확인해 주세요', '사진, 장소, 제목, 기록을 모두 입력해 주세요.');
       return;
     }
-    updateDiary({ diaryId: diary.id, pointId, title: title.trim(), summary: summary.trim(), date: diary.date, photoUri });
+    updateDiary({ diaryId: diary.id, pointId, title: title.trim(), summary: summary.trim(), date: diary.date, photoUri, photoUris: [photoUri] });
     navigation.goBack();
   };
 

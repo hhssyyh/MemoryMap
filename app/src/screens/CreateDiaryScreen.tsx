@@ -41,6 +41,7 @@ export function CreateDiaryScreen({ navigation }: Props) {
       title: title.trim(),
       summary: summary.trim(),
       photoUri,
+      photoUris: [photoUri],
       date: new Intl.DateTimeFormat('ko-KR', {
         year: 'numeric',
         month: '2-digit',
