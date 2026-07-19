@@ -491,15 +491,9 @@ export function MemoryMap({
 const controlButton = (colors: ThemeColors) =>
   ({
     alignItems: "center",
-    backgroundColor: "rgba(255, 253, 249, 0.82)",
-    elevation: 4,
     justifyContent: "center",
     position: "absolute",
     right: 16,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
-    shadowRadius: 4,
   }) as const;
 
 const createStyles = (colors: ThemeColors) =>
@@ -596,7 +590,7 @@ const createStyles = (colors: ThemeColors) =>
       position: "absolute",
     },
     mapBadgeText: {
-      color: colors.primary,
+      color: "#FFFFFF",
       fontSize: 9,
       fontWeight: "800",
       letterSpacing: 1.2,
@@ -630,15 +624,24 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.primary,
       fontSize: 20,
       fontWeight: "700",
+      textShadowColor: "rgba(35, 22, 27, 0.72)",
+      textShadowOffset: { width: 0, height: 2 },
+      textShadowRadius: 5,
     },
     fitButtonIcon: {
-      color: colors.primary,
+      color: "#FFFFFF",
       fontSize: 25,
       fontWeight: "700",
+      textShadowColor: "rgba(35, 22, 27, 0.72)",
+      textShadowOffset: { width: 0, height: 2 },
+      textShadowRadius: 5,
     },
     locationButtonIcon: {
-      color: colors.primary,
+      color: "#FFFFFF",
       fontSize: 24,
       fontWeight: "700",
+      textShadowColor: "rgba(35, 22, 27, 0.72)",
+      textShadowOffset: { width: 0, height: 2 },
+      textShadowRadius: 5,
     },
   });

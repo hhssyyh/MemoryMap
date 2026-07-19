@@ -21,6 +21,7 @@ export function EditDiaryScreen({ navigation, route }: Props) {
   const [pointId, setPointId] = useState(sourcePoint?.id ?? '');
   const [title, setTitle] = useState(diary?.title ?? '');
   const [summary, setSummary] = useState(diary?.summary ?? '');
+  const [tagsText, setTagsText] = useState(diary?.tags?.join(', ') ?? '');
   const [photoUri, setPhotoUri] = useState(diary?.photoUri);
   const insets = useSafeAreaInsets();
 
@@ -31,7 +32,15 @@ export function EditDiaryScreen({ navigation, route }: Props) {
       Alert.alert('내용을 확인해 주세요', '사진, 장소, 제목, 기록을 모두 입력해 주세요.');
       return;
     }
-    updateDiary({ diaryId: diary.id, pointId, title: title.trim(), summary: summary.trim(), date: diary.date, photoUri, photoUris: [photoUri] });
+    const tags = Array.from(
+      new Set(
+        tagsText
+          .split(/[\n,]/)
+          .map((tag) => tag.trim().replace(/^#\s*/, ''))
+          .filter(Boolean),
+      ),
+    );
+    updateDiary({ diaryId: diary.id, pointId, title: title.trim(), summary: summary.trim(), date: diary.date, photoUri, photoUris: [photoUri], tags });
     navigation.goBack();
   };
 
@@ -56,6 +65,16 @@ export function EditDiaryScreen({ navigation, route }: Props) {
         <TextInput onChangeText={setTitle} style={styles.input} value={title} />
         <Text style={styles.label}>기록</Text>
         <TextInput multiline onChangeText={setSummary} style={[styles.input, styles.summary]} textAlignVertical="top" value={summary} />
+        <Text style={styles.label}>태그</Text>
+        <TextInput
+          autoCapitalize="none"
+          onChangeText={setTagsText}
+          placeholder="#맛집, #여행"
+          placeholderTextColor={colors.textMuted}
+          style={styles.input}
+          value={tagsText}
+        />
+        <Text style={styles.hint}>쉼표 또는 줄바꿈으로 태그를 구분해 주세요.</Text>
       </ScrollView>
     </View>
   );
@@ -68,4 +87,5 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   content: { padding: spacing.lg }, label: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: spacing.sm, marginTop: spacing.md }, locations: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   locationChip: { backgroundColor: colors.surface, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9 }, locationChipSelected: { backgroundColor: colors.primary }, locationText: { color: colors.text, fontWeight: '600' }, locationTextSelected: { color: colors.surface },
   input: { backgroundColor: colors.surface, borderRadius: 14, color: colors.text, elevation: 1, fontFamily: colors.fontFamily, fontSize: 16, padding: spacing.md, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 }, summary: { minHeight: 150 },
+  hint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.xs },
 });

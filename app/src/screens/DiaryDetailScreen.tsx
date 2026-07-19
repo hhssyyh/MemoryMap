@@ -97,9 +97,13 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
             </View>
           )}
 
+          <View pointerEvents="none" style={styles.heroOverlay} />
           <View pointerEvents="none" style={styles.heroText}>
             <Text style={styles.placeLine}>⌖ {location.split(',')[0]}</Text>
             <Text style={styles.title}>{diary.title}</Text>
+            <View style={styles.heroDatePill}>
+              <Text style={styles.heroDateText}>{diary.date} · {diary.time ?? '19:32'}</Text>
+            </View>
           </View>
 
           {photos.length > 1 ? (
@@ -166,9 +170,15 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
             </View>
             <View style={styles.tags}>
               {tags.map((tag) => (
-                <View key={tag} style={styles.tag}>
-                  <Text style={styles.tagText}># {tag}</Text>
-                </View>
+                <Pressable
+                  accessibilityLabel={`#${tag} 태그로 검색`}
+                  accessibilityRole="button"
+                  key={tag}
+                  onPress={() => navigation.navigate('SearchDiary', { tag: `#${tag}` })}
+                  style={({ pressed }) => [styles.tag, pressed && styles.pressed]}
+                >
+                  <Text style={styles.tagText}>#{tag}</Text>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -197,10 +207,12 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
       <View style={[styles.actionBar, { bottom: insets.bottom + 10 }]}>
         <Pressable
           onPress={() => toggleDiarySaved(diary.id)}
-          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.action, diary.isSaved && styles.actionSaved, pressed && styles.pressed]}
         >
-          <BookmarkIcon filled={Boolean(diary.isSaved)} size={24} />
-          <Text style={[styles.actionText, diary.isSaved && styles.actionTextActive]}>보관함에 저장</Text>
+          <BookmarkIcon color={diary.isSaved ? pink : ink} filled={Boolean(diary.isSaved)} size={24} />
+          <Text style={[styles.actionText, diary.isSaved && styles.actionTextActive]}>
+            {diary.isSaved ? '보관됨' : '보관하기'}
+          </Text>
         </Pressable>
         <View style={styles.actionDivider} />
         <Pressable onPress={confirmDelete} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
@@ -233,53 +245,47 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: 'row', justifyContent: 'space-between', left: 24, position: 'absolute', right: 24, zIndex: 20 },
   topButton: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 14,
-    borderWidth: 1,
-    elevation: 7,
     height: 44,
     justifyContent: 'center',
-    shadowColor: '#8E6470',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
     width: 44,
   },
-  topButtonText: { color: ink, fontSize: 34, lineHeight: 36 },
-  moreText: { color: ink, fontSize: 25, lineHeight: 26, marginTop: -8 },
+  topButtonText: { color: '#FFFFFF', fontSize: 38, lineHeight: 40, textShadowColor: 'rgba(35, 22, 27, 0.72)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 5 },
+  moreText: { color: '#FFFFFF', fontSize: 27, lineHeight: 28, marginTop: -8, textShadowColor: 'rgba(35, 22, 27, 0.72)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 5 },
   pressed: { opacity: 0.68, transform: [{ scale: 0.98 }] },
-  heroText: { left: 24, position: 'absolute', right: 28, top: 190 },
-  placeLine: { color: '#E77985', fontSize: 14, marginBottom: 12, textShadowColor: 'rgba(255,255,255,0.85)', textShadowRadius: 4 },
-  title: { color: ink, fontSize: 29, fontWeight: '600', lineHeight: 37, textShadowColor: 'rgba(255,255,255,0.9)', textShadowRadius: 5 },
+  heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(54, 37, 43, 0.26)' },
+  heroText: { bottom: 34, left: 24, position: 'absolute', right: 28 },
+  placeLine: { color: '#FFE7EC', fontSize: 13, fontWeight: '700', letterSpacing: 0.4, marginBottom: 10, textShadowColor: 'rgba(35, 22, 27, 0.35)', textShadowRadius: 5 },
+  title: { color: '#FFFFFF', fontSize: 31, fontWeight: '700', lineHeight: 39, textShadowColor: 'rgba(35, 22, 27, 0.42)', textShadowRadius: 8 },
+  heroDatePill: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.2)', borderColor: 'rgba(255,255,255,0.46)', borderRadius: 14, borderWidth: 1, marginTop: 14, paddingHorizontal: 10, paddingVertical: 5 },
+  heroDateText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
   photoCount: {
-    alignSelf: 'center',
     backgroundColor: 'rgba(61, 55, 58, 0.58)',
     borderColor: 'rgba(255,255,255,0.34)',
     borderRadius: 15,
     borderWidth: 1,
-    bottom: 12,
     paddingHorizontal: 13,
     paddingVertical: 5,
     position: 'absolute',
+    right: 24,
+    top: 92,
   },
   photoCountText: { color: '#FFFFFF', fontSize: 14 },
   sheet: {
     backgroundColor: '#FFF7F4',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    marginTop: -1,
+    marginTop: -28,
     paddingHorizontal: 20,
-    paddingTop: 26,
+    paddingTop: 30,
     shadowColor: '#D69AA8',
     shadowOffset: { width: 0, height: -8 },
     shadowOpacity: 0.08,
     shadowRadius: 18,
   },
   metaCard: {
-    backgroundColor: 'rgba(255,255,255,0.86)',
-    borderColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderColor: 'rgba(241, 209, 215, 0.9)',
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 4,
     flexDirection: 'row',
@@ -298,13 +304,13 @@ const styles = StyleSheet.create({
   metaSub: { color: muted, fontSize: 13, lineHeight: 20, marginTop: 2 },
   metaLocationText: { flex: 1 },
   noteCard: {
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    borderColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.93)',
+    borderColor: 'rgba(241, 209, 215, 0.8)',
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 5,
     marginTop: 22,
-    minHeight: 250,
+    minHeight: 238,
     padding: 20,
     shadowColor: '#C98595',
     shadowOffset: { width: 0, height: 7 },
@@ -315,15 +321,15 @@ const styles = StyleSheet.create({
   cardHeaderCompact: { alignItems: 'center', flexDirection: 'row', marginBottom: 16 },
   cardIcon: { color: pink, fontSize: 24, marginRight: 10 },
   cardTitle: { color: ink, flex: 1, fontSize: 20, fontWeight: '700' },
-  editCircle: { alignItems: 'center', backgroundColor: pink, borderColor: 'rgba(255,255,255,0.7)', borderRadius: 22, borderWidth: 1, elevation: 5, height: 44, justifyContent: 'center', shadowColor: pink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.28, shadowRadius: 12, width: 44 },
-  editIcon: { color: '#FFFFFF', fontSize: 22 },
+  editCircle: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
+  editIcon: { color: pink, fontSize: 24, textShadowColor: 'rgba(185, 72, 90, 0.18)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   noteBodyRow: { flexDirection: 'row' },
   body: { color: ink, flex: 1.15, fontSize: 15, lineHeight: 29 },
   noteIllustration: { alignSelf: 'flex-end', borderRadius: 10, elevation: 3, flex: 0.85, height: 128, marginLeft: 10, opacity: 0.78, shadowColor: '#9C707A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10 },
   tagCard: {
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    borderColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.93)',
+    borderColor: 'rgba(241, 209, 215, 0.8)',
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 4,
     marginTop: 22,
@@ -334,12 +340,12 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
   },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  tag: { backgroundColor: chip, borderColor: 'rgba(255,255,255,0.8)', borderRadius: 16, borderWidth: 1, elevation: 1, paddingHorizontal: 15, paddingVertical: 8, shadowColor: '#D5909F', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 5 },
+  tag: { backgroundColor: chip, borderColor: 'rgba(205, 118, 137, 0.18)', borderRadius: 16, borderWidth: 1, elevation: 1, paddingHorizontal: 15, paddingVertical: 8, shadowColor: '#D5909F', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 5 },
   tagText: { color: '#B9485A', fontSize: 14 },
   actionBar: {
     backgroundColor: 'rgba(255,255,255,0.94)',
     borderColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 14,
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 9,
     flexDirection: 'row',
@@ -354,6 +360,7 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
   },
   action: { alignItems: 'center', flex: 1, justifyContent: 'center' },
+  actionSaved: { backgroundColor: 'rgba(251, 225, 227, 0.7)' },
   actionIcon: { color: ink, fontSize: 22, marginBottom: 4 },
   actionText: { color: ink, fontSize: 12 },
   actionTextActive: { color: '#EC6381' },

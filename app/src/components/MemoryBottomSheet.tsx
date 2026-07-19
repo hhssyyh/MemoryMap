@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { spacing, type ThemeColors } from '../constants/theme';
@@ -19,6 +19,48 @@ export function MemoryBottomSheet({ point, onClose, onOpenDiary }: MemoryBottomS
   const styles = createStyles(colors);
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(460)).current;
+  const close = useCallback(() => {
+    Animated.timing(translateY, {
+      duration: 220,
+      toValue: 460,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) onClose();
+    });
+  }, [onClose, translateY]);
+  const panResponder = useMemo(
+    () => PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        gesture.dy > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderMove: (_, gesture) => {
+        translateY.setValue(Math.max(0, gesture.dy));
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy > 90 || gesture.vy > 0.7) {
+          close();
+          return;
+        }
+
+        Animated.spring(translateY, {
+          damping: 24,
+          mass: 0.9,
+          stiffness: 210,
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(translateY, {
+          damping: 24,
+          mass: 0.9,
+          stiffness: 210,
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    }),
+    [close, translateY],
+  );
 
   useEffect(() => {
     if (!point) return;
@@ -31,19 +73,9 @@ export function MemoryBottomSheet({ point, onClose, onOpenDiary }: MemoryBottomS
       toValue: 0,
       useNativeDriver: true,
     }).start();
-  }, [point, translateY]);
+  }, [point?.id, translateY]);
 
   if (!point) return null;
-
-  const close = () => {
-    Animated.timing(translateY, {
-      duration: 220,
-      toValue: 460,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) onClose();
-    });
-  };
 
   return (
     <Animated.View
@@ -55,7 +87,9 @@ export function MemoryBottomSheet({ point, onClose, onOpenDiary }: MemoryBottomS
         },
       ]}
     >
-      <View style={styles.handle} />
+      <View {...panResponder.panHandlers} style={styles.handleTouchArea}>
+        <View style={styles.handle} />
+      </View>
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text style={styles.eyebrow}>MY MEMORIES</Text>
@@ -101,13 +135,14 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 22,
   },
-  handle: { alignSelf: 'center', backgroundColor: '#C7B6BE', borderRadius: 3, elevation: 1, height: 5, marginBottom: spacing.md, shadowColor: '#8F6070', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, width: 44 },
+  handleTouchArea: { alignItems: 'center', alignSelf: 'center', height: 28, justifyContent: 'center', marginBottom: spacing.xs, marginTop: -spacing.xs, width: 100 },
+  handle: { backgroundColor: '#C7B6BE', borderRadius: 3, elevation: 1, height: 5, shadowColor: '#8F6070', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, width: 44 },
   header: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.sm },
   headerText: { flex: 1, paddingRight: spacing.md },
   eyebrow: { color: colors.primary, fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
   title: { color: '#433942', fontFamily: colors.fontFamily, fontSize: 27, marginTop: 2 },
   subtitle: { color: '#887982', fontSize: 12, marginTop: 2 },
-  closeButton: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.62)', borderRadius: 18, elevation: 2, height: 36, justifyContent: 'center', shadowColor: '#A77D8B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, width: 36 },
+  closeButton: { alignItems: 'center', height: 36, justifyContent: 'center', width: 36 },
   closeIcon: { color: colors.text, fontSize: 25, lineHeight: 27 },
   list: { gap: spacing.sm, paddingBottom: spacing.md, paddingTop: spacing.md },
 });

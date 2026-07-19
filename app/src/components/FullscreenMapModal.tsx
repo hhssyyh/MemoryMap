@@ -80,17 +80,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   closeButton: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 253, 249, 0.82)',
-    borderRadius: 20,
-    elevation: 5,
     height: 40,
     justifyContent: 'center',
     position: 'absolute',
     right: 14,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
-    shadowRadius: 5,
     width: 40,
   },
   closeButtonPressed: {
@@ -98,9 +91,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     transform: [{ scale: 0.96 }],
   },
   closeIcon: {
-    color: colors.text,
+    color: '#FFFFFF',
     fontSize: 28,
     fontWeight: '400',
     lineHeight: 30,
+    textShadowColor: 'rgba(35, 22, 27, 0.72)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 5,
   },
 });

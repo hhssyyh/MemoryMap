@@ -40,13 +40,17 @@ export function HomeScreen() {
   const styles = createStyles(colors);
   const { points } = useDiaries();
   const [isMapExpanded, setIsMapExpanded] = useState(false);
-  const [selectedPoint, setSelectedPoint] = useState<DiaryPoint | null>(null);
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const currentLocation = useCurrentLocation();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const diaryCount = useMemo(
     () => points.reduce((total, point) => total + point.diaries.length, 0),
     [points],
+  );
+  const selectedPoint = useMemo(
+    () => points.find((point) => point.id === selectedPointId) ?? null,
+    [points, selectedPointId],
   );
 
   return (
@@ -107,7 +111,7 @@ export function HomeScreen() {
             <Pressable
               accessibilityLabel={`${point.location} 기록 보기`}
               key={point.id}
-              onPress={() => setSelectedPoint(point)}
+              onPress={() => setSelectedPointId(point.id)}
               style={[
                 styles.marker,
                 position,
@@ -147,7 +151,7 @@ export function HomeScreen() {
         ) : null}
 
         <MemoryBottomSheet
-          onClose={() => setSelectedPoint(null)}
+          onClose={() => setSelectedPointId(null)}
           onOpenDiary={(diary, location) =>
             navigation.navigate("DiaryDetail", { diary, location })
           }
@@ -162,7 +166,7 @@ export function HomeScreen() {
         onClose={() => setIsMapExpanded(false)}
         onOpenDiaries={(point) => {
           setIsMapExpanded(false);
-          setSelectedPoint(point);
+          setSelectedPointId(point.id);
         }}
         onRequestLocation={currentLocation.requestLocation}
         points={points}
@@ -248,23 +252,19 @@ const createStyles = (colors: ThemeColors) =>
     },
     addButton: {
       alignItems: "center",
-      backgroundColor: "rgba(231, 155, 170, 0.9)",
-      borderRadius: 35,
-      elevation: 8,
       height: 50,
       justifyContent: "center",
       position: "absolute",
       right: spacing.lg,
-      shadowColor: "#614B67",
-      shadowOffset: { width: 0, height: 5 },
-      shadowOpacity: 0.2,
-      shadowRadius: 10,
       width: 50,
     },
     addIcon: {
       color: "#FFFFFF",
-      fontSize: 25,
-      fontWeight: "500",
-      lineHeight: 40,
+      fontSize: 38,
+      fontWeight: "700",
+      lineHeight: 44,
+      textShadowColor: "rgba(35, 22, 27, 0.72)",
+      textShadowOffset: { width: 0, height: 2 },
+      textShadowRadius: 5,
     },
   });

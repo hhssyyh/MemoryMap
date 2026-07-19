@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,17 +10,20 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useDiaries } from '../context/DiaryContext';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import type { DiaryPoint } from '../types/diary';
 
 export function MapScreen() {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const { points } = useDiaries();
-  const [diaryListPoint, setDiaryListPoint] = useState<DiaryPoint | null>(null);
+  const [diaryListPointId, setDiaryListPointId] = useState<string | null>(null);
   const [highlightedPointId, setHighlightedPointId] = useState<string>();
   const currentLocation = useCurrentLocation();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
+  const diaryListPoint = useMemo(
+    () => points.find((point) => point.id === diaryListPointId) ?? null,
+    [diaryListPointId, points],
+  );
 
   return (
     <View style={styles.screen}>
@@ -36,7 +39,7 @@ export function MapScreen() {
         isLocating={currentLocation.isLocating}
         onOpenDiaries={(point) => {
           setHighlightedPointId(point.id);
-          setDiaryListPoint(point);
+          setDiaryListPointId(point.id);
         }}
         onRequestLocation={currentLocation.requestLocation}
         points={points}
@@ -44,11 +47,11 @@ export function MapScreen() {
       />
       <MemoryBottomSheet
         onClose={() => {
-          setDiaryListPoint(null);
+          setDiaryListPointId(null);
           setHighlightedPointId(undefined);
         }}
         onOpenDiary={(diary, location) => {
-          setDiaryListPoint(null);
+          setDiaryListPointId(null);
           navigation.navigate('DiaryDetail', { diary, location });
         }}
         point={diaryListPoint}
