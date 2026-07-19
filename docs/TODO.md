@@ -2,18 +2,13 @@
 
 ## Current Task
 
-- [x] Connect diary creation to saved locations
-
----
-
-## Next Tasks
-
 - [ ] Define the next MVP task
 
 ---
 
 ## Completed
 
+- [x] Add tag-based diary search
 - [x] Connect diary creation to saved locations
 - [x] Add time-based map themes, daily visit routes, animated markers, and clustering
 - [x] Build diary detail screen

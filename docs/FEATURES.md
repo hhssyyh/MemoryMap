@@ -19,6 +19,12 @@
 * Select an existing saved map location for the new entry
 * Show the saved entry immediately in diary lists and on its map marker
 
+### Tag search
+
+* Select a tag on a diary detail screen to open tag search with that tag prefilled
+* Show diary entries that use the selected tag
+* Edit the tags of an existing diary entry
+
 ### 다이어리
 
 * 다이어리 작성
