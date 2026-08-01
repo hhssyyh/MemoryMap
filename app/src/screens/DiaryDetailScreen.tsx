@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   Alert,
@@ -19,6 +19,7 @@ import { BookmarkIcon } from '../components/BookmarkIcon';
 import { ThemedText as Text } from '../components/ThemedText';
 import { useDiaries } from '../context/DiaryContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import type { DiaryEntry } from '../types/diary';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DiaryDetail'>;
 
@@ -31,12 +32,16 @@ function getDiaryPhotos(photoUri?: string, photoUris?: string[]) {
 }
 
 export function DiaryDetailScreen({ navigation, route }: Props) {
-  const { deleteDiary, points, toggleDiarySaved } = useDiaries();
+  const { deleteDiary, getDiary, points, toggleDiarySaved } = useDiaries();
   const insets = useSafeAreaInsets();
   const routeDiary = route.params.diary;
+  const [storedDiary, setStoredDiary] = useState<DiaryEntry>();
+  useEffect(() => {
+    void getDiary(routeDiary.id).then((entry) => setStoredDiary(entry ?? undefined));
+  }, [getDiary, routeDiary.id]);
   const point = points.find((item) => item.diaries.some((diary) => diary.id === routeDiary.id));
-  const diary = point?.diaries.find((item) => item.id === routeDiary.id) ?? routeDiary;
-  const location = point?.location ?? route.params.location;
+  const diary = storedDiary ?? point?.diaries.find((item) => item.id === routeDiary.id) ?? routeDiary;
+  const location = storedDiary?.location ?? point?.location ?? route.params.location;
   const photos = useMemo(() => getDiaryPhotos(diary.photoUri, diary.photoUris), [diary.photoUri, diary.photoUris]);
   const [photoIndex, setPhotoIndex] = useState(0);
   const tags = diary.tags?.length ? diary.tags : ['여행일기', location.split(',')[0]];
@@ -53,8 +58,7 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
         text: '삭제',
         style: 'destructive',
         onPress: () => {
-          deleteDiary(diary.id);
-          navigation.goBack();
+          void deleteDiary(diary.id).then(() => navigation.goBack());
         },
       },
     ]);
@@ -111,6 +115,7 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
               <Text style={styles.photoCountText}>{photoIndex + 1} / {photos.length}</Text>
             </View>
           ) : null}
+
         </View>
 
         <View style={styles.sheet}>
@@ -206,7 +211,7 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
 
       <View style={[styles.actionBar, { bottom: insets.bottom + 10 }]}>
         <Pressable
-          onPress={() => toggleDiarySaved(diary.id)}
+          onPress={() => void toggleDiarySaved(diary.id)}
           style={({ pressed }) => [styles.action, diary.isSaved && styles.actionSaved, pressed && styles.pressed]}
         >
           <BookmarkIcon color={diary.isSaved ? pink : ink} filled={Boolean(diary.isSaved)} size={24} />

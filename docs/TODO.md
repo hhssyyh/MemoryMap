@@ -8,6 +8,11 @@
 
 ## Completed
 
+- [x] Keep every photo visible when changing a diary cover photo in the edit screen
+- [x] Seed SQLite with starter diary records for local testing
+- [x] Allow selecting a diary cover photo from its edit screen
+- [x] Persist diary entries, photo metadata, and copied photo files locally with SQLite
+- [x] Define the next MVP task
 - [x] Restore missing `react-native-svg` install for bookmark icons
 - [x] Add tag-based diary search
 - [x] Connect diary creation to saved locations

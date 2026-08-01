@@ -10,6 +10,23 @@ export type DiaryEntry = {
   temperature?: string;
   time?: string;
   isSaved?: boolean;
+  visitedAt?: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
+  tripName?: string;
+  routeOrder?: number;
+  photos?: DiaryPhoto[];
+};
+
+export type DiaryPhoto = {
+  id: string;
+  fileUri: string;
+  exifLatitude?: number;
+  exifLongitude?: number;
+  takenAt?: string;
+  sortOrder: number;
+  isCover: boolean;
 };
 
 export type DiaryPoint = {

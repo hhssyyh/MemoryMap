@@ -79,23 +79,33 @@ function createMarkerCollection(
 function createDailyRouteCollection(
   points: DiaryPoint[],
 ): GeoJSON.FeatureCollection<GeoJSON.LineString, { date: string }> {
-  const coordinatesByDate = new Map<string, [number, number][]>();
+  const diariesByDate = new Map<string, { id: string; routeOrder?: number; visitedAt?: string; coordinate: [number, number] }[]>();
 
   points.forEach((point) => {
-    const datesAtPoint = new Set(point.diaries.map((diary) => diary.date));
-
-    datesAtPoint.forEach((date) => {
-      const coordinates = coordinatesByDate.get(date) ?? [];
-      coordinates.push([point.coordinate.longitude, point.coordinate.latitude]);
-      coordinatesByDate.set(date, coordinates);
+    point.diaries.forEach((diary) => {
+      const date = (diary.visitedAt ?? diary.date).slice(0, 10);
+      const diaries = diariesByDate.get(date) ?? [];
+      diaries.push({
+        id: diary.id,
+        routeOrder: diary.routeOrder,
+        visitedAt: diary.visitedAt,
+        coordinate: [diary.longitude ?? point.coordinate.longitude, diary.latitude ?? point.coordinate.latitude],
+      });
+      diariesByDate.set(date, diaries);
     });
   });
 
   return {
     type: "FeatureCollection",
-    features: Array.from(coordinatesByDate.entries())
-      .filter(([, coordinates]) => coordinates.length >= 2)
-      .map(([date, coordinates]) => ({
+    features: Array.from(diariesByDate.entries())
+      .map(([date, diaries]) => ({
+        date,
+        coordinates: diaries
+          .sort((a, b) => (a.routeOrder ?? Number.MAX_SAFE_INTEGER) - (b.routeOrder ?? Number.MAX_SAFE_INTEGER) || (a.visitedAt ?? '').localeCompare(b.visitedAt ?? '') || a.id.localeCompare(b.id))
+          .map((diary) => diary.coordinate),
+      }))
+      .filter(({ coordinates }) => coordinates.length >= 2)
+      .map(({ date, coordinates }) => ({
         type: "Feature",
         geometry: { type: "LineString", coordinates },
         properties: { date },

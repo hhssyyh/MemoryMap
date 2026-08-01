@@ -20,7 +20,8 @@
         }
       ],
       "@rnmapbox/maps",
-      "expo-font"
+      "expo-font",
+      "expo-sqlite"
     ],
     "ios": {
       "supportsTablet": true

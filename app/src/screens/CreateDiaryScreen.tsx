@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   Alert,
@@ -23,32 +23,37 @@ type Props = NativeStackScreenProps<RootStackParamList, 'CreateDiary'>;
 export function CreateDiaryScreen({ navigation }: Props) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
-  const { addDiary, points } = useDiaries();
-  const [pointId, setPointId] = useState(points[0]?.id ?? '');
+  const { addDiary, savedPoints } = useDiaries();
+  const [pointId, setPointId] = useState(savedPoints[0]?.id ?? '');
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [photoUri, setPhotoUri] = useState<string>();
   const insets = useSafeAreaInsets();
 
-  const save = () => {
+  useEffect(() => {
+    if (!pointId && savedPoints[0]) setPointId(savedPoints[0].id);
+  }, [pointId, savedPoints]);
+
+  const save = async () => {
     if (!pointId || !photoUri || !title.trim() || !summary.trim()) {
       Alert.alert('내용을 확인해 주세요', '사진, 장소, 제목, 기록을 모두 입력해 주세요.');
       return;
     }
 
-    addDiary({
-      pointId,
-      title: title.trim(),
-      summary: summary.trim(),
-      photoUri,
-      photoUris: [photoUri],
-      date: new Intl.DateTimeFormat('ko-KR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(new Date()),
-    });
-    navigation.goBack();
+    try {
+      await addDiary({
+        pointId,
+        title: title.trim(),
+        summary: summary.trim(),
+        photoUri,
+        photoUris: [photoUri],
+        date: new Date().toISOString().slice(0, 10),
+        visitedAt: new Date().toISOString(),
+      });
+      navigation.goBack();
+    } catch {
+      Alert.alert('저장하지 못했습니다', '사진 파일 또는 로컬 저장소를 확인한 뒤 다시 시도해 주세요.');
+    }
   };
 
   return (
@@ -57,12 +62,12 @@ export function CreateDiaryScreen({ navigation }: Props) {
       <View style={styles.header}>
         <Pressable onPress={navigation.goBack}><Text style={styles.cancel}>취소</Text></Pressable>
         <Text style={styles.headerTitle}>새 기록</Text>
-        <Pressable onPress={save}><Text style={styles.save}>저장</Text></Pressable>
+        <Pressable onPress={() => void save()}><Text style={styles.save}>저장</Text></Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>저장된 장소</Text>
         <View style={styles.locations}>
-          {points.map((point) => (
+          {savedPoints.map((point) => (
             <Pressable
               key={point.id}
               onPress={() => setPointId(point.id)}

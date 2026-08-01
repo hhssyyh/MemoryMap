@@ -27,6 +27,7 @@ export function EditDiaryScreen({ navigation, route }: Props) {
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>(diary?.tags ?? []);
   const [photoUris, setPhotoUris] = useState<string[]>(() => getInitialPhotos(diary?.photoUri, diary?.photoUris));
+  const [coverPhotoUri, setCoverPhotoUri] = useState<string | undefined>(() => diary?.photos?.find((photo) => photo.isCover)?.fileUri ?? getInitialPhotos(diary?.photoUri, diary?.photoUris)[0]);
   const insets = useSafeAreaInsets();
 
   if (!diary) return <View style={styles.screen}><Text style={styles.missing}>기록을 찾을 수 없습니다.</Text></View>;
@@ -47,7 +48,11 @@ export function EditDiaryScreen({ navigation, route }: Props) {
     setTags((current) => current.filter((tag) => tag !== tagToRemove));
   };
 
-  const save = () => {
+  const selectCoverPhoto = (uri: string) => {
+    if (photoUris.includes(uri)) setCoverPhotoUri(uri);
+  };
+
+  const save = async () => {
     if (!sourcePoint?.id || !photoUris.length || !title.trim() || !summary.trim()) {
       Alert.alert('내용을 확인해 주세요', '사진, 제목, 기록을 모두 입력해 주세요.');
       return;
@@ -58,17 +63,25 @@ export function EditDiaryScreen({ navigation, route }: Props) {
       ? Array.from(new Set([...tags, pendingTag]))
       : tags;
 
-    updateDiary({
-      diaryId: diary.id,
-      pointId: sourcePoint.id,
-      title: title.trim(),
-      summary: summary.trim(),
-      date: diary.date,
-      photoUri: photoUris[0],
-      photoUris,
-      tags: nextTags,
-    });
-    navigation.goBack();
+    const orderedPhotoUris = coverPhotoUri
+      ? [coverPhotoUri, ...photoUris.filter((uri) => uri !== coverPhotoUri)]
+      : photoUris;
+
+    try {
+      await updateDiary({
+        diaryId: diary.id,
+        pointId: sourcePoint.id,
+        title: title.trim(),
+        summary: summary.trim(),
+        date: diary.date,
+        photoUri: orderedPhotoUris[0],
+        photoUris: orderedPhotoUris,
+        tags: nextTags,
+      });
+      navigation.goBack();
+    } catch {
+      Alert.alert('저장하지 못했습니다', '사진 파일 또는 로컬 저장소를 확인한 뒤 다시 시도해 주세요.');
+    }
   };
 
   return (
@@ -77,14 +90,20 @@ export function EditDiaryScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable onPress={navigation.goBack}><Text style={styles.cancel}>취소</Text></Pressable>
         <Text style={styles.headerTitle}>기록 수정</Text>
-        <Pressable onPress={save}><Text style={styles.save}>저장</Text></Pressable>
+        <Pressable onPress={() => void save()}><Text style={styles.save}>저장</Text></Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>사진</Text>
+        <Text style={styles.photoHint}>사진을 탭해 대표 사진을 지정할 수 있어요.</Text>
         <DiaryPhotoPicker
+          coverPhotoUri={coverPhotoUri}
           multiple
           onChange={(uri) => setPhotoUris([uri])}
-          onChangeMultiple={setPhotoUris}
+          onChangeMultiple={(uris) => {
+            setPhotoUris(uris);
+            setCoverPhotoUri((current) => current && uris.includes(current) ? current : uris[0]);
+          }}
+          onCoverPhotoChange={selectCoverPhoto}
           photoUri={photoUris[0]}
           photoUris={photoUris}
         />
@@ -138,6 +157,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   header: { alignItems: 'center', borderBottomColor: colors.border, borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', padding: spacing.md },
   headerTitle: { color: colors.text, fontSize: 17, fontWeight: '800' }, cancel: { color: colors.textMuted, fontSize: 15 }, save: { color: colors.primary, fontSize: 15, fontWeight: '800' },
   content: { padding: spacing.lg }, label: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: spacing.sm, marginTop: spacing.md },
+  photoHint: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm, marginTop: -spacing.xs },
   input: { backgroundColor: colors.surface, borderRadius: 14, color: colors.text, elevation: 1, fontFamily: colors.fontFamily, fontSize: 16, padding: spacing.md, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 }, summary: { minHeight: 150 },
   tagInputRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
   tagInput: { backgroundColor: colors.surface, borderRadius: 14, color: colors.text, elevation: 1, flex: 1, fontFamily: colors.fontFamily, fontSize: 16, padding: spacing.md, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 },

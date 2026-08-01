@@ -9,20 +9,25 @@ type Props = {
   multiple?: boolean;
   photoUri?: string;
   photoUris?: string[];
+  coverPhotoUri?: string;
   onChange: (uri: string) => void;
   onChangeMultiple?: (uris: string[]) => void;
+  onCoverPhotoChange?: (uri: string) => void;
 };
 
 export function DiaryPhotoPicker({
   multiple = false,
   photoUri,
   photoUris,
+  coverPhotoUri,
   onChange,
   onChangeMultiple,
+  onCoverPhotoChange,
 }: Props) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const photos = photoUris?.length ? photoUris : photoUri ? [photoUri] : [];
+  const selectedCoverUri = coverPhotoUri && photos.includes(coverPhotoUri) ? coverPhotoUri : photos[0];
 
   const updatePhotos = (uris: string[]) => {
     const nextUris = Array.from(new Set(uris.filter(Boolean)));
@@ -69,7 +74,7 @@ export function DiaryPhotoPicker({
   return (
     <View>
       <View style={styles.preview}>
-        {photos[0] ? <Image source={{ uri: photos[0] }} style={styles.image} /> : <Text style={styles.empty}>사진을 추가해 주세요</Text>}
+        {selectedCoverUri ? <Image source={{ uri: selectedCoverUri }} style={styles.image} /> : <Text style={styles.empty}>사진을 추가해 주세요</Text>}
       </View>
       {multiple && photos.length ? (
         <ScrollView
@@ -79,11 +84,19 @@ export function DiaryPhotoPicker({
           contentContainerStyle={styles.photoListContent}
         >
           {photos.map((uri, index) => (
-            <View key={uri} style={styles.thumbnailWrap}>
-              <Image source={{ uri }} style={styles.thumbnail} />
+            <View key={uri} style={[styles.thumbnailWrap, uri === selectedCoverUri && styles.thumbnailWrapCover]}>
+              <Pressable
+                accessibilityLabel={`사진 ${index + 1}${uri === selectedCoverUri ? ', 대표 사진' : ', 대표 사진으로 지정'}`}
+                accessibilityRole="button"
+                onPress={() => onCoverPhotoChange?.(uri)}
+                style={styles.thumbnailButton}
+              >
+                <Image source={{ uri }} style={styles.thumbnail} />
+              </Pressable>
               <View style={styles.thumbnailIndex}>
                 <Text style={styles.thumbnailIndexText}>{index + 1}</Text>
               </View>
+              {uri === selectedCoverUri ? <View style={styles.coverBadge}><Text style={styles.coverBadgeText}>대표</Text></View> : null}
               <Pressable
                 accessibilityLabel="사진 삭제"
                 accessibilityRole="button"
@@ -110,9 +123,13 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   photoList: { marginTop: spacing.sm },
   photoListContent: { gap: spacing.sm, paddingRight: spacing.sm },
   thumbnailWrap: { borderRadius: 12, height: 78, overflow: 'hidden', width: 78 },
+  thumbnailWrapCover: { borderColor: colors.primary, borderWidth: 3 },
+  thumbnailButton: { ...StyleSheet.absoluteFillObject },
   thumbnail: { height: '100%', width: '100%' },
   thumbnailIndex: { alignItems: 'center', backgroundColor: 'rgba(55, 42, 48, 0.58)', borderRadius: 10, height: 20, justifyContent: 'center', left: 6, position: 'absolute', top: 6, width: 20 },
   thumbnailIndexText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  coverBadge: { backgroundColor: colors.primary, bottom: 0, left: 0, paddingHorizontal: 5, paddingVertical: 3, position: 'absolute' },
+  coverBadgeText: { color: colors.surface, fontSize: 10, fontWeight: '800' },
   removePhotoButton: { alignItems: 'center', backgroundColor: 'rgba(55, 42, 48, 0.68)', borderRadius: 11, height: 22, justifyContent: 'center', position: 'absolute', right: 5, top: 5, width: 22 },
   removePhotoText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800', lineHeight: 19 },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
