@@ -34,7 +34,7 @@ export function DiaryListItem({ diary, location, onPress, variant = 'default' }:
         pressed && styles.saveButtonPressed,
       ]}
     >
-      <BookmarkIcon color={colors.primary} filled={diary.isSaved} size={floating ? 22 : 23} />
+      <BookmarkIcon color={colors.primary} filled={diary.isSaved} size={floating ? 27 : 29} />
     </Pressable>
   );
 
@@ -110,7 +110,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   title: { color: colors.text, fontSize: 16, fontWeight: '700' },
   summary: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
-  inlineSaveButton: { alignItems: 'center', height: 34, justifyContent: 'center', marginLeft: spacing.sm, width: 34 },
+  inlineSaveButton: { alignItems: 'center', height: 42, justifyContent: 'center', marginLeft: spacing.sm, width: 42 },
   floatingSaveButton: { alignItems: 'center', height: 30, justifyContent: 'center', position: 'absolute', right: 8, top: 7, width: 30 },
   saveButtonPressed: { opacity: 0.65, transform: [{ scale: 0.94 }] },
   homeCard: { alignItems: 'center', backgroundColor: 'rgba(255, 253, 253, 0.96)', borderColor: 'rgba(255,255,255,0.95)', borderRadius: 20, borderWidth: 1, elevation: 5, flexDirection: 'row', height: 124, padding: 10, shadowColor: '#B98D9B', shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.14, shadowRadius: 16 },

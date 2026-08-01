@@ -12,35 +12,62 @@ import { ThemedText as Text } from '../components/ThemedText';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditDiary'>;
 
+function getInitialPhotos(photoUri?: string, photoUris?: string[]) {
+  return Array.from(new Set((photoUris?.length ? photoUris : photoUri ? [photoUri] : []).filter(Boolean)));
+}
+
 export function EditDiaryScreen({ navigation, route }: Props) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const { points, updateDiary } = useDiaries();
   const sourcePoint = points.find((point) => point.diaries.some((diary) => diary.id === route.params.diaryId));
   const diary = sourcePoint?.diaries.find((item) => item.id === route.params.diaryId);
-  const [pointId, setPointId] = useState(sourcePoint?.id ?? '');
   const [title, setTitle] = useState(diary?.title ?? '');
   const [summary, setSummary] = useState(diary?.summary ?? '');
-  const [tagsText, setTagsText] = useState(diary?.tags?.join(', ') ?? '');
-  const [photoUri, setPhotoUri] = useState(diary?.photoUri);
+  const [tagInput, setTagInput] = useState('');
+  const [tags, setTags] = useState<string[]>(diary?.tags ?? []);
+  const [photoUris, setPhotoUris] = useState<string[]>(() => getInitialPhotos(diary?.photoUri, diary?.photoUris));
   const insets = useSafeAreaInsets();
 
   if (!diary) return <View style={styles.screen}><Text style={styles.missing}>기록을 찾을 수 없습니다.</Text></View>;
 
+  const addTag = () => {
+    const nextTag = tagInput.trim().replace(/^#\s*/, '');
+    if (!nextTag) return;
+
+    setTags((current) =>
+      current.some((tag) => tag.toLocaleLowerCase() === nextTag.toLocaleLowerCase())
+        ? current
+        : [...current, nextTag],
+    );
+    setTagInput('');
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setTags((current) => current.filter((tag) => tag !== tagToRemove));
+  };
+
   const save = () => {
-    if (!pointId || !photoUri || !title.trim() || !summary.trim()) {
-      Alert.alert('내용을 확인해 주세요', '사진, 장소, 제목, 기록을 모두 입력해 주세요.');
+    if (!sourcePoint?.id || !photoUris.length || !title.trim() || !summary.trim()) {
+      Alert.alert('내용을 확인해 주세요', '사진, 제목, 기록을 모두 입력해 주세요.');
       return;
     }
-    const tags = Array.from(
-      new Set(
-        tagsText
-          .split(/[\n,]/)
-          .map((tag) => tag.trim().replace(/^#\s*/, ''))
-          .filter(Boolean),
-      ),
-    );
-    updateDiary({ diaryId: diary.id, pointId, title: title.trim(), summary: summary.trim(), date: diary.date, photoUri, photoUris: [photoUri], tags });
+
+    const pendingTag = tagInput.trim().replace(/^#\s*/, '');
+    const nextTags = pendingTag
+      ? Array.from(new Set([...tags, pendingTag]))
+      : tags;
+
+    updateDiary({
+      diaryId: diary.id,
+      pointId: sourcePoint.id,
+      title: title.trim(),
+      summary: summary.trim(),
+      date: diary.date,
+      photoUri: photoUris[0],
+      photoUris,
+      tags: nextTags,
+    });
     navigation.goBack();
   };
 
@@ -53,28 +80,54 @@ export function EditDiaryScreen({ navigation, route }: Props) {
         <Pressable onPress={save}><Text style={styles.save}>저장</Text></Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.label}>저장된 장소</Text>
-        <View style={styles.locations}>{points.map((point) => (
-          <Pressable key={point.id} onPress={() => setPointId(point.id)} style={[styles.locationChip, point.id === pointId && styles.locationChipSelected]}>
-            <Text style={[styles.locationText, point.id === pointId && styles.locationTextSelected]}>{point.location}</Text>
-          </Pressable>
-        ))}</View>
         <Text style={styles.label}>사진</Text>
-        <DiaryPhotoPicker onChange={setPhotoUri} photoUri={photoUri} />
+        <DiaryPhotoPicker
+          multiple
+          onChange={(uri) => setPhotoUris([uri])}
+          onChangeMultiple={setPhotoUris}
+          photoUri={photoUris[0]}
+          photoUris={photoUris}
+        />
         <Text style={styles.label}>제목</Text>
         <TextInput onChangeText={setTitle} style={styles.input} value={title} />
         <Text style={styles.label}>기록</Text>
         <TextInput multiline onChangeText={setSummary} style={[styles.input, styles.summary]} textAlignVertical="top" value={summary} />
         <Text style={styles.label}>태그</Text>
-        <TextInput
-          autoCapitalize="none"
-          onChangeText={setTagsText}
-          placeholder="#맛집, #여행"
-          placeholderTextColor={colors.textMuted}
-          style={styles.input}
-          value={tagsText}
-        />
-        <Text style={styles.hint}>쉼표 또는 줄바꿈으로 태그를 구분해 주세요.</Text>
+        <View style={styles.tagInputRow}>
+          <TextInput
+            autoCapitalize="none"
+            onChangeText={setTagInput}
+            onSubmitEditing={addTag}
+            placeholder="키워드 입력"
+            placeholderTextColor={colors.textMuted}
+            returnKeyType="done"
+            style={styles.tagInput}
+            value={tagInput}
+          />
+          <Pressable
+            accessibilityLabel="태그 추가"
+            accessibilityRole="button"
+            onPress={addTag}
+            style={({ pressed }) => [styles.addTagButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.addTagText}>추가</Text>
+          </Pressable>
+        </View>
+        <View style={styles.tags}>
+          {tags.map((tag) => (
+            <Pressable
+              accessibilityLabel={`#${tag} 태그 삭제`}
+              accessibilityRole="button"
+              key={tag}
+              onPress={() => removeTag(tag)}
+              style={({ pressed }) => [styles.tag, pressed && styles.pressed]}
+            >
+              <Text style={styles.tagText}>#{tag}</Text>
+              <Text style={styles.removeTagText}>×</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.hint}>태그를 눌러 삭제할 수 있어요.</Text>
       </ScrollView>
     </View>
   );
@@ -84,8 +137,16 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { backgroundColor: colors.background, flex: 1 }, missing: { color: colors.textMuted, margin: spacing.xl, textAlign: 'center' },
   header: { alignItems: 'center', borderBottomColor: colors.border, borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', padding: spacing.md },
   headerTitle: { color: colors.text, fontSize: 17, fontWeight: '800' }, cancel: { color: colors.textMuted, fontSize: 15 }, save: { color: colors.primary, fontSize: 15, fontWeight: '800' },
-  content: { padding: spacing.lg }, label: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: spacing.sm, marginTop: spacing.md }, locations: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  locationChip: { backgroundColor: colors.surface, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9 }, locationChipSelected: { backgroundColor: colors.primary }, locationText: { color: colors.text, fontWeight: '600' }, locationTextSelected: { color: colors.surface },
+  content: { padding: spacing.lg }, label: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: spacing.sm, marginTop: spacing.md },
   input: { backgroundColor: colors.surface, borderRadius: 14, color: colors.text, elevation: 1, fontFamily: colors.fontFamily, fontSize: 16, padding: spacing.md, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 }, summary: { minHeight: 150 },
+  tagInputRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
+  tagInput: { backgroundColor: colors.surface, borderRadius: 14, color: colors.text, elevation: 1, flex: 1, fontFamily: colors.fontFamily, fontSize: 16, padding: spacing.md, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 },
+  addTagButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 14, height: 50, justifyContent: 'center', paddingHorizontal: 18 },
+  addTagText: { color: colors.surface, fontSize: 14, fontWeight: '800' },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: spacing.md },
+  tag: { alignItems: 'center', backgroundColor: '#FBE1E3', borderColor: 'rgba(205, 118, 137, 0.18)', borderRadius: 16, borderWidth: 1, elevation: 1, flexDirection: 'row', paddingHorizontal: 15, paddingVertical: 8, shadowColor: '#D5909F', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 5 },
+  tagText: { color: '#B9485A', fontSize: 14 },
+  removeTagText: { color: '#B9485A', fontSize: 16, fontWeight: '800', marginLeft: 7, marginTop: -1 },
   hint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.xs },
+  pressed: { opacity: 0.68, transform: [{ scale: 0.98 }] },
 });

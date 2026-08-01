@@ -8,6 +8,7 @@
 
 ## Completed
 
+- [x] Restore missing `react-native-svg` install for bookmark icons
 - [x] Add tag-based diary search
 - [x] Connect diary creation to saved locations
 - [x] Add time-based map themes, daily visit routes, animated markers, and clustering
