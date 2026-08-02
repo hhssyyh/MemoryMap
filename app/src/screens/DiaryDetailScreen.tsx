@@ -20,6 +20,7 @@ import { ThemedText as Text } from '../components/ThemedText';
 import { useDiaries } from '../context/DiaryContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { DiaryEntry } from '../types/diary';
+import { isTablet } from '../utils/isTablet';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DiaryDetail'>;
 
@@ -210,6 +211,20 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
       </View>
 
       <View style={[styles.actionBar, { bottom: insets.bottom + 10 }]}>
+        {isTablet() ? (
+          <>
+            <Pressable
+              accessibilityLabel="손글씨 프로토타입"
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('HandwritingPrototype', { diary })}
+              style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+            >
+              <Text style={styles.actionIcon}>✎</Text>
+              <Text style={styles.actionText}>손글씨</Text>
+            </Pressable>
+            <View style={styles.actionDivider} />
+          </>
+        ) : null}
         <Pressable
           onPress={() => void toggleDiarySaved(diary.id)}
           style={({ pressed }) => [styles.action, diary.isSaved && styles.actionSaved, pressed && styles.pressed]}

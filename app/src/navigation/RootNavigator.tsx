@@ -14,6 +14,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { CreateDiaryScreen } from '../screens/CreateDiaryScreen';
 import { EditDiaryScreen } from '../screens/EditDiaryScreen';
 import { SearchDiaryScreen } from '../screens/SearchDiaryScreen';
+import { HandwritingPrototypeScreen } from '../screens/HandwritingPrototypeScreen';
 import type { DiaryEntry } from '../types/diary';
 import { ThemedText as Text } from '../components/ThemedText';
 
@@ -26,6 +27,7 @@ export type RootStackParamList = {
   CreateDiary: undefined;
   EditDiary: { diaryId: string };
   SearchDiary: { tag?: string } | undefined;
+  HandwritingPrototype: { diary: DiaryEntry };
 };
 
 export type RootTabParamList = {
@@ -94,6 +96,11 @@ export function RootNavigator() {
         />
         <Stack.Screen component={EditDiaryScreen} name="EditDiary" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen component={SearchDiaryScreen} name="SearchDiary" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen
+          component={HandwritingPrototypeScreen}
+          name="HandwritingPrototype"
+          options={{ animation: 'slide_from_right' }}
+        />
         <Stack.Screen
           component={DiaryDetailScreen}
           name="DiaryDetail"
