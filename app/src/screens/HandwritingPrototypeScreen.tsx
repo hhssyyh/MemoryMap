@@ -224,6 +224,20 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
     await saveNow(true);
   }, [captureCurrentThumbnail, saveNow]);
 
+  const closeEditor = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    // 개발용 직접 진입이나 복원된 단독 화면에는 이전 route가 없을 수 있다.
+    // 이때도 GO_BACK 경고를 내지 않고 해당 다이어리 상세 화면으로 안전하게 교체한다.
+    navigation.replace('DiaryDetail', {
+      diary,
+      location: diary.location ?? '',
+    });
+  }, [diary, navigation]);
+
   useEffect(
     () =>
       navigation.addListener('beforeRemove', (event) => {
@@ -544,7 +558,7 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }] }>
       <View style={[styles.header, !tablet && styles.headerPhone]}>
-        <Pressable accessibilityLabel="필기 편집기 닫기" onPress={navigation.goBack} style={styles.headerButton}>
+        <Pressable accessibilityLabel="필기 편집기 닫기" onPress={closeEditor} style={styles.headerButton}>
           <Text style={styles.headerButtonText}>‹</Text>
         </Pressable>
         <View style={styles.headerCenter}>
