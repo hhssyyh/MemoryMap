@@ -22,6 +22,20 @@ follow through the same document contract after the iOS workflow is stable.
 * The first release stores data locally and restores it after an app restart.
 * Editable source and PNG previews are required. PDF export is deferred.
 
+## Responsive editor layout
+
+The canvas is the primary surface on every device. Undo, redo, drawing tools,
+the current color, and stroke width stay in a compact floating toolbar. Page
+management, brush details, backgrounds, insertion, and layer controls remain
+hidden until requested so they do not reduce the writing area.
+
+On tablets, the toolbar floats above the page and secondary controls open as a
+right-side panel. On phones, the page fits the available portrait width, the
+toolbar is anchored near the bottom safe area, and secondary controls open in a
+scrollable bottom sheet. Finger drawing is enabled by default on phones because
+most phones do not have a stylus; users can switch to the navigation tool when
+they need to pan or zoom the page.
+
 ## Platform architecture
 
 * iOS authoring and rendering: PencilKit

@@ -2,10 +2,13 @@
 
 ## Current Task
 
-- [x] Build the iPad-first cross-platform handwriting editor described in `HANDWRITING_EDITOR.md`
+- [x] Redesign handwriting as a canvas-first editor with responsive tablet and phone controls
 
 ### Handwriting editor milestones
 
+- [x] Separate the floating handwriting toolbar from secondary editor settings
+- [x] Use a right-side settings panel on tablets and a bottom sheet on phones
+- [x] Enable the handwriting editor on phones with finger drawing by default
 - [x] Define the versioned document, page, layer, and stroke models
 - [x] Add a versioned SQLite migration and handwriting repository
 - [x] Add the editor history foundation for undo and redo
