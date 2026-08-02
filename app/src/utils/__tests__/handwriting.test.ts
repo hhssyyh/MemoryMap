@@ -13,6 +13,8 @@ describe('buildInkStroke', () => {
     expect(stroke.points).toBe(points);
     expect(stroke.color).toBe('#000000');
     expect(stroke.width).toBe(4);
+    expect(stroke.tool).toBe('pen');
+    expect(stroke.opacity).toBe(1);
   });
 
   it('assigns a unique id to each stroke', () => {
