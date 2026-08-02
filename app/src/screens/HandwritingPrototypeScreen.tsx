@@ -230,11 +230,17 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
       return;
     }
 
-    // 개발용 직접 진입이나 복원된 단독 화면에는 이전 route가 없을 수 있다.
-    // 이때도 GO_BACK 경고를 내지 않고 해당 다이어리 상세 화면으로 안전하게 교체한다.
-    navigation.replace('DiaryDetail', {
-      diary,
-      location: diary.location ?? '',
+    // 단독 진입에서도 상세 화면 뒤에 다이어리 탭을 함께 구성해야 상세 화면의
+    // 뒤로가기가 다시 막히지 않는다.
+    navigation.reset({
+      index: 1,
+      routes: [
+        { name: 'MainTabs', params: { screen: 'Diary' } },
+        {
+          name: 'DiaryDetail',
+          params: { diary, location: diary.location ?? '' },
+        },
+      ],
     });
   }, [diary, navigation]);
 
