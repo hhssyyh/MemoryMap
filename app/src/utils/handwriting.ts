@@ -7,6 +7,7 @@ import {
   type InkPoint,
   type InkStroke,
   type InkTool,
+  type PageOrientation,
 } from '../types/handwriting';
 
 export function createHandwritingId(prefix: string): string {
@@ -30,11 +31,17 @@ export function buildInkStroke(
   };
 }
 
-export function createHandwritingPage(): HandwritingPage {
+export function createHandwritingPage(
+  orientation: PageOrientation = 'portrait',
+): HandwritingPage {
+  const landscape = orientation === 'landscape';
   return {
     id: createHandwritingId('page'),
-    width: DEFAULT_PAGE_WIDTH,
-    height: DEFAULT_PAGE_HEIGHT,
+    width: landscape ? DEFAULT_PAGE_HEIGHT : DEFAULT_PAGE_WIDTH,
+    height: landscape ? DEFAULT_PAGE_WIDTH : DEFAULT_PAGE_HEIGHT,
+    orientation,
+    contentRevision: 0,
+    thumbnailDirty: true,
     background: { type: 'preset', preset: 'blank' },
     layers: [
       {
@@ -68,6 +75,8 @@ export function duplicateHandwritingPage(page: HandwritingPage): HandwritingPage
   const clone = JSON.parse(JSON.stringify(page)) as HandwritingPage;
   clone.id = createHandwritingId('page');
   clone.thumbnailUri = undefined;
+  clone.thumbnailRevision = undefined;
+  clone.thumbnailDirty = true;
   clone.layers = clone.layers.map((layer) => ({
     ...layer,
     id: createHandwritingId(`${layer.type}-layer`),

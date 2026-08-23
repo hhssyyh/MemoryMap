@@ -1,33 +1,27 @@
-export const HANDWRITING_SCHEMA_VERSION = 1;
+export const HANDWRITING_SCHEMA_VERSION = 2;
 
 export const DEFAULT_PAGE_WIDTH = 900;
 export const DEFAULT_PAGE_HEIGHT = 1200;
+export const MAX_HANDWRITING_PAGES = 10;
+export const MAX_HANDWRITING_STROKES = 1000;
 
-export type InkPoint = {
-  // 기기 픽셀이 아닌 페이지 좌표를 사용해 화면 크기와 밀도가 달라도 같은 문서를 편집한다.
-  x: number;
-  y: number;
-  pressure?: number;
-  tiltX?: number;
-  tiltY?: number;
-  azimuth?: number;
-  timestamp: number;
-};
+export type { InkPoint, InkStroke } from 'native-ink-view';
+import type { InkStroke } from 'native-ink-view';
+export type InkTool = InkStroke['tool'];
 
-export type InkTool = 'pen' | 'highlighter';
+export type PageOrientation = 'portrait' | 'landscape';
+export type QuarterTurn = 0 | 90 | 180 | 270;
 
-export type InkStroke = {
-  id: string;
-  points: InkPoint[];
-  tool: InkTool;
-  color: string;
-  width: number;
-  opacity: number;
+export type ImageAssetReference = {
+  originalUri: string;
+  previewUri: string;
+  pixelWidth: number;
+  pixelHeight: number;
 };
 
 export type PageBackground =
   | { type: 'preset'; preset: 'blank' | 'lined' | 'grid' | 'dot' | 'cream' }
-  | { type: 'image'; assetUri: string };
+  | { type: 'image'; asset: ImageAssetReference; rotation: QuarterTurn };
 
 export type LayerTransform = {
   x: number;
@@ -52,7 +46,7 @@ export type InkLayer = LayerBase & {
 
 export type ImageLayer = LayerBase & {
   type: 'image';
-  assetUri: string;
+  asset: ImageAssetReference;
   width: number;
   height: number;
 };
@@ -70,8 +64,12 @@ export type HandwritingPage = {
   id: string;
   width: number;
   height: number;
+  orientation: PageOrientation;
   background: PageBackground;
   layers: HandwritingLayer[];
+  contentRevision: number;
+  thumbnailRevision?: number;
+  thumbnailDirty: boolean;
   thumbnailUri?: string;
 };
 

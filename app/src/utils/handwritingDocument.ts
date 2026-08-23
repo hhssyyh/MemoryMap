@@ -2,8 +2,14 @@ import type {
   HandwritingDocument,
   HandwritingLayer,
   HandwritingPage,
+  ImageAssetReference,
   InkStroke,
+  LayerTransform,
   PageBackground,
+} from '../types/handwriting';
+import {
+  MAX_HANDWRITING_PAGES,
+  MAX_HANDWRITING_STROKES,
 } from '../types/handwriting';
 import { createHandwritingPage, duplicateHandwritingPage } from './handwriting';
 import { createHandwritingId } from './handwriting';
@@ -12,15 +18,28 @@ function replacePage(
   document: HandwritingDocument,
   pageId: string,
   update: (page: HandwritingPage) => HandwritingPage,
+  contentChange = true,
 ): HandwritingDocument {
-  return {
-    ...document,
-    pages: document.pages.map((page) => (page.id === pageId ? update(page) : page)),
-  };
+  let changed = false;
+  const pages = document.pages.map((page) => {
+    if (page.id !== pageId) return page;
+    const next = update(page);
+    if (next === page) return page;
+    changed = true;
+    if (!contentChange) return next;
+    return {
+      ...next,
+      contentRevision: page.contentRevision + 1,
+      thumbnailDirty: true,
+    };
+  });
+  return changed ? { ...document, pages } : document;
 }
 
 export function addPage(document: HandwritingDocument): HandwritingDocument {
-  const page = createHandwritingPage();
+  if (document.pages.length >= MAX_HANDWRITING_PAGES) return document;
+  const selected = document.pages.find((page) => page.id === document.selectedPageId);
+  const page = createHandwritingPage(selected?.orientation ?? 'portrait');
   const selectedIndex = document.pages.findIndex((item) => item.id === document.selectedPageId);
   const insertAt = selectedIndex < 0 ? document.pages.length : selectedIndex + 1;
   const pages = [...document.pages];
@@ -29,8 +48,8 @@ export function addPage(document: HandwritingDocument): HandwritingDocument {
 }
 
 export function duplicatePage(document: HandwritingDocument, pageId: string): HandwritingDocument {
+  if (!canDuplicatePage(document, pageId)) return document;
   const sourceIndex = document.pages.findIndex((page) => page.id === pageId);
-  if (sourceIndex < 0) return document;
   const page = duplicateHandwritingPage(document.pages[sourceIndex]!);
   const pages = [...document.pages];
   pages.splice(sourceIndex + 1, 0, page);
@@ -85,6 +104,11 @@ export function setPageInkStrokes(
   pageId: string,
   strokes: InkStroke[],
 ): HandwritingDocument {
+  const currentPage = document.pages.find((page) => page.id === pageId);
+  const currentPageCount = getPageInkStrokes(currentPage).length;
+  const currentTotal = countDocumentInkStrokes(document);
+  const nextTotal = currentTotal - currentPageCount + strokes.length;
+  if (nextTotal > MAX_HANDWRITING_STROKES && nextTotal > currentTotal) return document;
   return replacePage(document, pageId, (page) => ({
     ...page,
     layers: page.layers.map((layer) =>
@@ -98,7 +122,12 @@ export function setPageThumbnail(
   pageId: string,
   thumbnailUri: string,
 ): HandwritingDocument {
-  return replacePage(document, pageId, (page) => ({ ...page, thumbnailUri }));
+  return replacePage(document, pageId, (page) => ({
+    ...page,
+    thumbnailUri,
+    thumbnailRevision: page.contentRevision,
+    thumbnailDirty: false,
+  }), false);
 }
 
 export function getPageInkStrokes(page: HandwritingPage | undefined): InkStroke[] {
@@ -106,22 +135,47 @@ export function getPageInkStrokes(page: HandwritingPage | undefined): InkStroke[
   return layer?.type === 'ink' ? layer.strokes : [];
 }
 
+export function countDocumentInkStrokes(document: HandwritingDocument): number {
+  return document.pages.reduce((total, page) => total + getPageInkStrokes(page).length, 0);
+}
+
+export function canDuplicatePage(document: HandwritingDocument, pageId: string): boolean {
+  if (document.pages.length >= MAX_HANDWRITING_PAGES) return false;
+  const source = document.pages.find((page) => page.id === pageId);
+  if (!source) return false;
+  return countDocumentInkStrokes(document) + getPageInkStrokes(source).length <=
+    MAX_HANDWRITING_STROKES;
+}
+
+/** Persistence boundary guard for limits that every document mutation must preserve. */
+export function assertHandwritingDocumentLimits(document: HandwritingDocument): void {
+  if (document.pages.length > MAX_HANDWRITING_PAGES) {
+    throw new Error(`A handwriting document may contain at most ${MAX_HANDWRITING_PAGES} pages.`);
+  }
+  if (countDocumentInkStrokes(document) > MAX_HANDWRITING_STROKES) {
+    throw new Error(`A handwriting document may contain at most ${MAX_HANDWRITING_STROKES} strokes.`);
+  }
+}
+
 export function addImageLayer(
   document: HandwritingDocument,
   pageId: string,
-  assetUri: string,
-  sourceWidth: number,
-  sourceHeight: number,
+  asset: ImageAssetReference,
+  layerId = createHandwritingId('image-layer'),
 ): HandwritingDocument {
   return replacePage(document, pageId, (page) => {
+    const sourceWidth = asset.pixelWidth;
+    const sourceHeight = asset.pixelHeight;
     const maxWidth = page.width * 0.55;
-    const width = Math.min(maxWidth, sourceWidth || maxWidth);
-    const height = sourceWidth > 0 ? width * (sourceHeight / sourceWidth) : width * 0.75;
+    const maxHeight = page.height * 0.55;
+    const aspectRatio = sourceWidth > 0 && sourceHeight > 0 ? sourceHeight / sourceWidth : 0.75;
+    const width = Math.min(maxWidth, maxHeight / aspectRatio, sourceWidth || maxWidth);
+    const height = width * aspectRatio;
     const layer: HandwritingLayer = {
-      id: createHandwritingId('image-layer'),
+      id: layerId,
       type: 'image',
-      name: '이미지',
-      assetUri,
+      name: nextLayerName(page, '사진'),
+      asset,
       width,
       height,
       transform: {
@@ -142,13 +196,14 @@ export function addStickerLayer(
   document: HandwritingDocument,
   pageId: string,
   stickerId: string,
+  layerId = createHandwritingId('sticker-layer'),
 ): HandwritingDocument {
   return replacePage(document, pageId, (page) => {
     const size = page.width * 0.18;
     const layer: HandwritingLayer = {
-      id: createHandwritingId('sticker-layer'),
+      id: layerId,
       type: 'sticker',
-      name: `스티커 · ${stickerId}`,
+      name: nextLayerName(page, '스티커'),
       stickerId,
       width: size,
       height: size,
@@ -196,13 +251,196 @@ export function moveLayer(
   direction: -1 | 1,
 ): HandwritingDocument {
   return replacePage(document, pageId, (page) => {
-    const index = page.layers.findIndex((layer) => layer.id === layerId);
-    const target = Math.max(0, Math.min(index + direction, page.layers.length - 1));
+    const inkLayers = page.layers.filter((layer) => layer.type === 'ink');
+    const editableLayers = page.layers.filter((layer) => layer.type !== 'ink');
+    const index = editableLayers.findIndex((layer) => layer.id === layerId);
+    const target = Math.max(0, Math.min(index + direction, editableLayers.length - 1));
     if (index < 0 || index === target) return page;
-    const layers = [...page.layers];
-    const [layer] = layers.splice(index, 1);
+    const [layer] = editableLayers.splice(index, 1);
     if (!layer) return page;
-    layers.splice(target, 0, layer);
+    editableLayers.splice(target, 0, layer);
+    return { ...page, layers: [...inkLayers, ...editableLayers] };
+  });
+}
+
+function nextLayerName(page: HandwritingPage, prefix: '사진' | '스티커') {
+  const used = new Set(page.layers.map((layer) => layer.name));
+  let index = 1;
+  while (used.has(`${prefix} ${index}`)) index += 1;
+  return `${prefix} ${index}`;
+}
+
+export function duplicateLayer(
+  document: HandwritingDocument,
+  pageId: string,
+  layerId: string,
+  duplicateId = createHandwritingId('layer'),
+): HandwritingDocument {
+  return replacePage(document, pageId, (page) => {
+    const index = page.layers.findIndex((layer) => layer.id === layerId && layer.type !== 'ink');
+    if (index < 0) return page;
+    const source = page.layers[index]!;
+    if (source.type === 'ink') return page;
+    const prefix = source.type === 'image' ? '사진' : '스티커';
+    const duplicate: HandwritingLayer = {
+      ...source,
+      id: duplicateId,
+      name: nextLayerName(page, prefix),
+      transform: constrainLayerTransform(page, source, {
+        ...source.transform,
+        x: source.transform.x + 24,
+        y: source.transform.y + 24,
+      }),
+    };
+    const layers = [...page.layers];
+    layers.splice(index + 1, 0, duplicate);
     return { ...page, layers };
   });
+}
+
+export function moveLayerTo(
+  document: HandwritingDocument,
+  pageId: string,
+  layerId: string,
+  destination: 'front' | 'back',
+): HandwritingDocument {
+  return replacePage(document, pageId, (page) => {
+    const inkLayers = page.layers.filter((layer) => layer.type === 'ink');
+    const editableLayers = page.layers.filter((layer) => layer.type !== 'ink');
+    const index = editableLayers.findIndex((layer) => layer.id === layerId);
+    if (index < 0) return page;
+    const [layer] = editableLayers.splice(index, 1);
+    if (!layer) return page;
+    if (destination === 'front') editableLayers.push(layer);
+    else editableLayers.unshift(layer);
+    return { ...page, layers: [...inkLayers, ...editableLayers] };
+  });
+}
+
+function normalizeDegrees(value: number) {
+  return ((value % 360) + 360) % 360;
+}
+
+function rotateAzimuth(value: number | undefined, degrees: number) {
+  if (value === undefined) return undefined;
+  const fullTurn = Math.PI * 2;
+  return ((value + (degrees * Math.PI) / 180) % fullTurn + fullTurn) % fullTurn;
+}
+
+export function rotatePage(
+  document: HandwritingDocument,
+  pageId: string,
+  direction: 'clockwise' | 'counterclockwise',
+): HandwritingDocument {
+  return replacePage(document, pageId, (page) => {
+    const clockwise = direction === 'clockwise';
+    const rotatePoint = (x: number, y: number) =>
+      clockwise ? { x: page.height - y, y: x } : { x: y, y: page.width - x };
+    const layers = page.layers.map((layer): HandwritingLayer => {
+      if (layer.type === 'ink') {
+        return {
+          ...layer,
+          strokes: layer.strokes.map((stroke) => ({
+            ...stroke,
+            points: stroke.points.map((point) => {
+              const rotated = rotatePoint(point.x, point.y);
+              return {
+                ...point,
+                ...rotated,
+                tiltX: clockwise ? point.tiltY === undefined ? undefined : -point.tiltY : point.tiltY,
+                tiltY: clockwise ? point.tiltX : point.tiltX === undefined ? undefined : -point.tiltX,
+                azimuth: rotateAzimuth(point.azimuth, clockwise ? 90 : -90),
+              };
+            }),
+          })),
+        };
+      }
+      const scaledWidth = layer.width * layer.transform.scaleX;
+      const scaledHeight = layer.height * layer.transform.scaleY;
+      const center = rotatePoint(
+        layer.transform.x + scaledWidth / 2,
+        layer.transform.y + scaledHeight / 2,
+      );
+      return {
+        ...layer,
+        transform: {
+          ...layer.transform,
+          x: center.x - scaledWidth / 2,
+          y: center.y - scaledHeight / 2,
+          rotation: normalizeDegrees(layer.transform.rotation + (clockwise ? 90 : -90)),
+        },
+      };
+    });
+    const background = page.background.type === 'image'
+      ? {
+          ...page.background,
+          rotation: normalizeDegrees(
+            page.background.rotation + (clockwise ? 90 : -90),
+          ) as 0 | 90 | 180 | 270,
+        }
+      : page.background;
+    return {
+      ...page,
+      width: page.height,
+      height: page.width,
+      orientation: page.orientation === 'portrait' ? 'landscape' : 'portrait',
+      background,
+      layers,
+      thumbnailUri: undefined,
+      thumbnailRevision: undefined,
+    };
+  });
+}
+
+export function getTopmostEditableLayerAtPoint(
+  page: HandwritingPage,
+  point: { x: number; y: number },
+): Exclude<HandwritingLayer, { type: 'ink' }> | undefined {
+  for (let index = page.layers.length - 1; index >= 0; index -= 1) {
+    const layer = page.layers[index];
+    if (!layer || layer.type === 'ink' || layer.hidden || layer.locked) continue;
+    const width = layer.width * layer.transform.scaleX;
+    const height = layer.height * layer.transform.scaleY;
+    const centerX = layer.transform.x + width / 2;
+    const centerY = layer.transform.y + height / 2;
+    const radians = (-layer.transform.rotation * Math.PI) / 180;
+    const dx = point.x - centerX;
+    const dy = point.y - centerY;
+    const localX = dx * Math.cos(radians) - dy * Math.sin(radians);
+    const localY = dx * Math.sin(radians) + dy * Math.cos(radians);
+    if (Math.abs(localX) <= width / 2 && Math.abs(localY) <= height / 2) return layer;
+  }
+  return undefined;
+}
+
+export function constrainLayerTransform(
+  page: HandwritingPage,
+  layer: Exclude<HandwritingLayer, { type: 'ink' }>,
+  candidate: LayerTransform,
+): LayerTransform {
+  const radians = (candidate.rotation * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(radians));
+  const sin = Math.abs(Math.sin(radians));
+  const rawWidth = layer.width * Math.max(0.1, Math.min(6, candidate.scaleX));
+  const rawHeight = layer.height * Math.max(0.1, Math.min(6, candidate.scaleY));
+  const boundsWidth = rawWidth * cos + rawHeight * sin;
+  const boundsHeight = rawWidth * sin + rawHeight * cos;
+  const fit = Math.min(1, page.width / Math.max(1, boundsWidth), page.height / Math.max(1, boundsHeight));
+  const scaleX = (rawWidth * fit) / layer.width;
+  const scaleY = (rawHeight * fit) / layer.height;
+  const width = layer.width * scaleX;
+  const height = layer.height * scaleY;
+  const fittedBoundsWidth = width * cos + height * sin;
+  const fittedBoundsHeight = width * sin + height * cos;
+  const desiredCenterX = candidate.x + rawWidth / 2;
+  const desiredCenterY = candidate.y + rawHeight / 2;
+  const centerX = Math.max(fittedBoundsWidth / 2, Math.min(page.width - fittedBoundsWidth / 2, desiredCenterX));
+  const centerY = Math.max(fittedBoundsHeight / 2, Math.min(page.height - fittedBoundsHeight / 2, desiredCenterY));
+  return {
+    x: centerX - width / 2,
+    y: centerY - height / 2,
+    scaleX,
+    scaleY,
+    rotation: normalizeDegrees(candidate.rotation),
+  };
 }
