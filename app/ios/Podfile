@@ -69,5 +69,18 @@ target 'MemoryMap' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+    # @generated begin memory-map-fmt-xcode26-fix
+    # Temporary compatibility workaround:
+    # React Native 0.81 bundles fmt 11.0.2, which does not compile in C++20
+    # mode with Apple Clang 21 / Xcode 26.4+. Keep every other pod on C++20.
+    # Remove after upgrading to a React Native version that uses fmt 12+.
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'fmt'
+
+      target.build_configurations.each do |build_configuration|
+        build_configuration.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      end
+    end
+    # @generated end memory-map-fmt-xcode26-fix
   end
 end

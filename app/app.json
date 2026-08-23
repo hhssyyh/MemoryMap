@@ -2,6 +2,7 @@
   "expo": {
     "name": "Memory Map",
     "slug": "memory-map",
+    "scheme": "exp+memory-map",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -21,7 +22,16 @@
       ],
       "@rnmapbox/maps",
       "expo-font",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "buildReactNativeFromSource": true
+          }
+        }
+      ],
+      "./plugins/withFmtXcode26Fix"
     ],
     "ios": {
       "supportsTablet": true,

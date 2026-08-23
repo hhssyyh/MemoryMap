@@ -27,6 +27,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
+          <string>exp+memory-map</string>
           <string>com.anonymous.memory-map</string>
         </array>
       </dict>
