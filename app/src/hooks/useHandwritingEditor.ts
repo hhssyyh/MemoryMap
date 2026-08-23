@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { handwritingRepository } from '../data/HandwritingRepository';
+import { cleanupHandwritingAssets } from '../data/handwritingAssetFiles';
 import type { HandwritingDocument } from '../types/handwriting';
 import {
   commitEditorChange,
@@ -9,6 +11,7 @@ import {
   undoEditorChange,
   type EditorHistory,
 } from '../utils/editorHistory';
+import { SerializedDocumentSaver } from '../utils/serializedDocumentSaver';
 
 export type SaveStatus = 'loading' | 'saved' | 'dirty' | 'saving' | 'error';
 
@@ -17,8 +20,7 @@ export function useHandwritingEditor(diaryId: string) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('loading');
   const [revision, setRevision] = useState(0);
   const historyRef = useRef(history);
-  const revisionRef = useRef(0);
-  const savedRevisionRef = useRef(0);
+  const saverRef = useRef(new SerializedDocumentSaver<HandwritingDocument>());
 
   useEffect(() => {
     historyRef.current = history;
@@ -31,10 +33,12 @@ export function useHandwritingEditor(diaryId: string) {
       .loadOrCreate(diaryId)
       .then((document) => {
         if (cancelled) return;
+        // At the beginning of a new editing session no undo stack can refer to
+        // orphaned files from a previous session, so they are safe to collect.
+        cleanupHandwritingAssets(diaryId, document.id, document);
         const loaded = createEditorHistory(document);
         historyRef.current = loaded;
-        revisionRef.current = 0;
-        savedRevisionRef.current = 0;
+        saverRef.current.reset();
         setRevision(0);
         setHistory(loaded);
         setSaveStatus('saved');
@@ -48,8 +52,8 @@ export function useHandwritingEditor(diaryId: string) {
   }, [diaryId]);
 
   const markChanged = useCallback(() => {
-    revisionRef.current += 1;
-    setRevision(revisionRef.current);
+    const nextRevision = saverRef.current.markChanged();
+    setRevision(nextRevision);
     setSaveStatus('dirty');
   }, []);
 
@@ -109,19 +113,27 @@ export function useHandwritingEditor(diaryId: string) {
   );
 
   const saveNow = useCallback(async (force = false) => {
-    const current = historyRef.current;
-    if (!current || (!force && revisionRef.current === savedRevisionRef.current)) return;
-    const savingRevision = revisionRef.current;
-    setSaveStatus('saving');
+    if (!historyRef.current) return;
     try {
-      await handwritingRepository.save(current.present);
-      savedRevisionRef.current = savingRevision;
-      setSaveStatus(revisionRef.current === savingRevision ? 'saved' : 'dirty');
+      await saverRef.current.save(
+        () => historyRef.current?.present ?? null,
+        (value) => handwritingRepository.save(value),
+        force,
+        setSaveStatus,
+      );
     } catch {
-      setSaveStatus('error');
       throw new Error('필기 문서를 저장하지 못했습니다.');
     }
   }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'inactive' || state === 'background') {
+        void saveNow(true).catch(() => undefined);
+      }
+    });
+    return () => subscription.remove();
+  }, [saveNow]);
 
   useEffect(() => {
     if (saveStatus !== 'dirty') return;
@@ -136,10 +148,12 @@ export function useHandwritingEditor(diaryId: string) {
     canUndo: Boolean(history?.past.length),
     canRedo: Boolean(history?.future.length),
     saveStatus,
+    revision,
     commit,
     replaceWithoutHistory,
     undo,
     redo,
     saveNow,
+    retrySave: saveNow,
   };
 }

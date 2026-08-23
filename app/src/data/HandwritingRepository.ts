@@ -7,6 +7,8 @@ import type {
 } from '../types/handwriting';
 import { HANDWRITING_SCHEMA_VERSION } from '../types/handwriting';
 import { createHandwritingDocument } from '../utils/handwriting';
+import { migrateHandwritingDocument } from '../utils/handwritingMigration';
+import { assertHandwritingDocumentLimits } from '../utils/handwritingDocument';
 
 type DocumentRow = {
   id: string;
@@ -26,6 +28,8 @@ type PageRow = {
   background_json: string;
   layers_json: string;
   thumbnail_uri: string | null;
+  content_revision: number;
+  thumbnail_revision: number | null;
 };
 
 function parseJson<T>(value: string, label: string): T {
@@ -37,32 +41,35 @@ function parseJson<T>(value: string, label: string): T {
 }
 
 function toDocument(row: DocumentRow, pageRows: PageRow[]): HandwritingDocument {
-  if (row.schema_version !== HANDWRITING_SCHEMA_VERSION) {
+  if (row.schema_version < 1 || row.schema_version > HANDWRITING_SCHEMA_VERSION) {
     throw new Error(`Unsupported handwriting schema version ${row.schema_version}.`);
   }
 
-  const pages: HandwritingPage[] = pageRows
+  const pages = pageRows
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((page) => ({
       id: page.id,
       width: page.width,
       height: page.height,
-      background: parseJson<PageBackground>(page.background_json, 'background'),
-      layers: parseJson<HandwritingLayer[]>(page.layers_json, 'layers'),
+      background: parseJson<PageBackground | Record<string, unknown>>(page.background_json, 'background'),
+      layers: parseJson<Array<HandwritingLayer | Record<string, unknown>>>(page.layers_json, 'layers'),
+      contentRevision: page.content_revision,
+      thumbnailRevision: page.thumbnail_revision ?? undefined,
+      thumbnailDirty: page.thumbnail_revision !== page.content_revision,
       thumbnailUri: page.thumbnail_uri ?? undefined,
     }));
 
-  return {
+  return migrateHandwritingDocument({
     id: row.id,
     diaryId: row.diary_id,
-    schemaVersion: HANDWRITING_SCHEMA_VERSION,
+    schemaVersion: row.schema_version,
     selectedPageId: pages.some((page) => page.id === row.selected_page_id)
       ? row.selected_page_id
       : pages[0]?.id ?? row.selected_page_id,
     pages,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
+  });
 }
 
 export class HandwritingRepository {
@@ -91,6 +98,7 @@ export class HandwritingRepository {
     if (!document.pages.some((page) => page.id === document.selectedPageId)) {
       throw new Error('The selected handwriting page does not exist.');
     }
+    assertHandwritingDocumentLimits(document);
 
     const database = await getDatabase();
     const updatedDocument = { ...document, updatedAt: new Date().toISOString() };
@@ -117,8 +125,8 @@ export class HandwritingRepository {
       for (const [index, page] of updatedDocument.pages.entries()) {
         await database.runAsync(
           `INSERT INTO handwriting_pages
-            (id, document_id, sort_order, width, height, background_json, layers_json, thumbnail_uri, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, document_id, sort_order, width, height, background_json, layers_json, thumbnail_uri, content_revision, thumbnail_revision, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           page.id,
           updatedDocument.id,
           index,
@@ -127,6 +135,8 @@ export class HandwritingRepository {
           JSON.stringify(page.background),
           JSON.stringify(page.layers),
           page.thumbnailUri ?? null,
+          page.contentRevision,
+          page.thumbnailRevision ?? null,
           updatedDocument.updatedAt,
         );
       }

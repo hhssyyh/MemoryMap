@@ -77,6 +77,10 @@ const migrations: ReadonlyArray<string> = [
     CREATE UNIQUE INDEX IF NOT EXISTS handwriting_pages_order_idx
       ON handwriting_pages(document_id, sort_order);
   `,
+  `
+    ALTER TABLE handwriting_pages ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE handwriting_pages ADD COLUMN thumbnail_revision INTEGER;
+  `,
 ];
 
 async function migrate(database: SQLite.SQLiteDatabase) {
