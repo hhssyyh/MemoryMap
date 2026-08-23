@@ -11,6 +11,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,7 +22,7 @@ import {
   type HandwritingPanelSection,
 } from '../components/handwriting/HandwritingEditorPanel';
 import { HandwritingToolbar } from '../components/handwriting/HandwritingToolbar';
-import { EditorViewport, LayerDragOverlay } from '../components/handwriting/EditorViewport';
+import { EditorViewport, LayerTransformOverlay } from '../components/handwriting/EditorViewport';
 import {
   InkInputAdapter,
   supportsNativeInkInput,
@@ -33,31 +34,48 @@ import {
 } from '../components/handwriting/SkiaInkCanvas';
 import { colors, shadows, spacing } from '../constants/theme';
 import {
-  copyHandwritingAsset,
+  cleanupHandwritingAssets,
+  importHandwritingAsset,
   writeHandwritingThumbnail,
 } from '../data/handwritingAssetFiles';
+import { handwritingRepository } from '../data/HandwritingRepository';
 import { useHandwritingEditor, type SaveStatus } from '../hooks/useHandwritingEditor';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import type { HandwritingLayer, HandwritingPage, PageBackground } from '../types/handwriting';
+import {
+  MAX_HANDWRITING_PAGES,
+  MAX_HANDWRITING_STROKES,
+  type HandwritingLayer,
+  type HandwritingPage,
+  type InkStroke,
+  type PageBackground,
+} from '../types/handwriting';
 import {
   addImageLayer,
   addPage,
   addStickerLayer,
+  canDuplicatePage,
   deleteLayer,
   deletePage,
   duplicatePage,
+  constrainLayerTransform,
+  countDocumentInkStrokes,
+  duplicateLayer,
+  getTopmostEditableLayerAtPoint,
   getPageInkStrokes,
   moveLayer,
+  moveLayerTo,
   movePage,
   selectPage,
   setPageBackground,
   setPageInkStrokes,
   setPageThumbnail,
   updateLayer,
+  rotatePage,
 } from '../utils/handwritingDocument';
+import { createHandwritingId } from '../utils/handwriting';
 import { isTablet } from '../utils/isTablet';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'HandwritingPrototype'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'HandwritingEditor'>;
 
 const BACKGROUNDS: Array<{ label: string; value: PageBackground }> = [
   { label: '무지', value: { type: 'preset', preset: 'blank' } },
@@ -177,12 +195,14 @@ function PageCard({
   );
 }
 
-export function HandwritingPrototypeScreen({ navigation, route }: Props) {
+export function HandwritingEditorScreen({ navigation, route }: Props) {
   const { diary } = route.params;
   const insets = useSafeAreaInsets();
   const tablet = isTablet();
   const leaveAllowed = useRef(false);
   const canvasRef = useRef<SkiaInkCanvasHandle>(null);
+  const documentRef = useRef<ReturnType<typeof useHandwritingEditor>['document']>(null);
+  const thumbnailQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const lastThumbnailContent = useRef('');
   const [tool, setTool] = useState<EditorTool>('pen');
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
@@ -193,6 +213,7 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
   const [workspaceSize, setWorkspaceSize] = useState({ width: 1, height: 1 });
   const [color, setColor] = useState<string>('#3D3A39');
   const [strokeWidth, setStrokeWidth] = useState<number>(4);
+  const [viewportResetKey, setViewportResetKey] = useState(0);
   const {
     document,
     canUndo,
@@ -203,26 +224,56 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
     undo,
     redo,
     saveNow,
+    retrySave,
   } = useHandwritingEditor(diary.id);
+  documentRef.current = document;
 
-  const captureCurrentThumbnail = useCallback(async () => {
-    if (!document) return;
-    const page =
-      document.pages.find((candidate) => candidate.id === document.selectedPageId) ??
-      document.pages[0];
-    if (!page) return;
-    const bytes = await canvasRef.current?.makePngSnapshot();
-    if (!bytes) return;
-    const uri = writeHandwritingThumbnail(diary.id, document.id, page.id, bytes);
-    // 썸네일은 사용자 편집이 아니므로 undo 단계와 자동저장 기준 시각을 변경하지 않는다.
-    replaceWithoutHistory((current) => setPageThumbnail(current, page.id, uri), false);
-    return uri;
-  }, [diary.id, document, replaceWithoutHistory]);
+  const captureCurrentThumbnail = useCallback(() => {
+    const requestedDocument = documentRef.current;
+    const requestedPage = requestedDocument?.pages.find(
+      (candidate) => candidate.id === requestedDocument.selectedPageId,
+    );
+    if (!requestedDocument || !requestedPage) return Promise.resolve(undefined);
+    const pageId = requestedPage.id;
+    const contentRevision = requestedPage.contentRevision;
+
+    const capture = thumbnailQueueRef.current.then(async () => {
+      const before = documentRef.current;
+      const beforePage = before?.pages.find((candidate) => candidate.id === pageId);
+      if (
+        !before ||
+        before.selectedPageId !== pageId ||
+        !beforePage ||
+        beforePage.contentRevision !== contentRevision
+      ) return undefined;
+
+      const bytes = await canvasRef.current?.makePngSnapshot();
+      if (!bytes) return undefined;
+      const after = documentRef.current;
+      const afterPage = after?.pages.find((candidate) => candidate.id === pageId);
+      if (
+        !after ||
+        after.selectedPageId !== pageId ||
+        !afterPage ||
+        afterPage.contentRevision !== contentRevision
+      ) return undefined;
+
+      const uri = writeHandwritingThumbnail(diary.id, requestedDocument.id, pageId, bytes);
+      // Captures are serialized and only committed while page ID and content
+      // revision still match, preventing a snapshot from being attached elsewhere.
+      replaceWithoutHistory((current) => setPageThumbnail(current, pageId, uri), false);
+      return uri;
+    });
+    thumbnailQueueRef.current = capture.catch(() => undefined);
+    return capture;
+  }, [diary.id, replaceWithoutHistory]);
 
   const saveWithThumbnail = useCallback(async () => {
     await captureCurrentThumbnail();
     await saveNow(true);
-  }, [captureCurrentThumbnail, saveNow]);
+    const saved = await handwritingRepository.load(diary.id);
+    if (saved) cleanupHandwritingAssets(diary.id, saved.id, saved);
+  }, [captureCurrentThumbnail, diary.id, saveNow]);
 
   const closeEditor = useCallback(() => {
     if (navigation.canGoBack()) {
@@ -267,8 +318,7 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
   const thumbnailContentKey = selectedPageForThumbnail
     ? JSON.stringify({
         id: selectedPageForThumbnail.id,
-        background: selectedPageForThumbnail.background,
-        layers: selectedPageForThumbnail.layers,
+        contentRevision: selectedPageForThumbnail.contentRevision,
       })
     : '';
 
@@ -277,10 +327,12 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
     if (lastThumbnailContent.current === thumbnailContentKey) return;
     const timer = setTimeout(() => {
       lastThumbnailContent.current = thumbnailContentKey;
-      void captureCurrentThumbnail().catch(() => undefined);
+      void captureCurrentThumbnail()
+        .then(() => saveNow(true))
+        .catch(() => undefined);
     }, 700);
     return () => clearTimeout(timer);
-  }, [captureCurrentThumbnail, saveStatus, thumbnailContentKey]);
+  }, [captureCurrentThumbnail, saveNow, saveStatus, thumbnailContentKey]);
 
   if (!document) {
     return (
@@ -300,12 +352,13 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
   const nativeInkActive =
     supportsNativeInkInput && (tool === 'pen' || tool === 'highlighter' || tool === 'eraser');
 
-  // 화면 비율과 관계없이 3:4 페이지 전체가 먼저 보이도록 작업 영역 안에 맞춘다.
+  // 문서 방향의 실제 비율을 유지하면서 작업 영역을 최대한 사용한다.
   const toolbarSpace = tablet ? 108 : 102;
   const availableWidth = Math.max(1, workspaceSize.width - (tablet ? 72 : 24));
   const availableHeight = Math.max(1, workspaceSize.height - toolbarSpace);
-  const pageWidth = Math.min(availableWidth, availableHeight * 0.75, tablet ? 900 : 560);
-  const pageHeight = pageWidth * (4 / 3);
+  const pageRatio = selectedPage.width / selectedPage.height;
+  const pageWidth = Math.min(availableWidth, availableHeight * pageRatio, tablet ? 900 : 560);
+  const pageHeight = pageWidth / pageRatio;
 
   async function pickImage(useAsBackground: boolean) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -320,25 +373,25 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
     });
     const asset = result.canceled ? undefined : result.assets[0];
     if (!asset) return;
-    addManagedImage(asset.uri, asset.width, asset.height, useAsBackground);
+    addManagedImage(asset.uri, useAsBackground);
   }
 
-  function addManagedImage(
+  async function addManagedImage(
     sourceUri: string,
-    width: number | undefined,
-    height: number | undefined,
     useAsBackground = false,
   ) {
     try {
-      const uri = copyHandwritingAsset(diary.id, document!.id, sourceUri);
+      const asset = await importHandwritingAsset(diary.id, document!.id, sourceUri);
       if (useAsBackground) {
         commit((current) =>
-          setPageBackground(current, selectedPage.id, { type: 'image', assetUri: uri }),
+          setPageBackground(current, selectedPage.id, { type: 'image', asset, rotation: 0 }),
         );
       } else {
+        const layerId = createHandwritingId('image-layer');
         commit((current) =>
-          addImageLayer(current, selectedPage.id, uri, width ?? 1200, height ?? 900),
+          addImageLayer(current, selectedPage.id, asset, layerId),
         );
+        setSelectedLayerId(layerId);
         setTool('select');
       }
       setPanelSection(null);
@@ -348,12 +401,20 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
   }
 
   function transformSelectedLayer(
-    transform: (layer: Exclude<HandwritingLayer, { type: 'ink' }>) => HandwritingLayer,
+    transform: (
+      layer: Exclude<HandwritingLayer, { type: 'ink' }>,
+    ) => Exclude<HandwritingLayer, { type: 'ink' }>,
   ) {
-    if (!selectedLayer || selectedLayer.type === 'ink') return;
+    if (!selectedLayer || selectedLayer.type === 'ink' || selectedLayer.locked) return;
     commit((current) =>
       updateLayer(current, selectedPage.id, selectedLayer.id, (layer) =>
-        layer.type === 'ink' ? layer : transform(layer),
+        layer.type === 'ink' ? layer : (() => {
+          const transformed = transform(layer);
+          return {
+            ...transformed,
+            transform: constrainLayerTransform(selectedPage, layer, transformed.transform),
+          };
+        })(),
       ),
     );
   }
@@ -370,6 +431,29 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
     ]);
   }
 
+  function commitInkStrokes(pageId: string, strokes: InkStroke[]) {
+    let accepted = true;
+    commit((current) => {
+      const page = current.pages.find((candidate) => candidate.id === pageId);
+      if (!page) {
+        accepted = false;
+        return current;
+      }
+      const currentPageCount = getPageInkStrokes(page).length;
+      const nextTotal = countDocumentInkStrokes(current) - currentPageCount + strokes.length;
+      if (nextTotal > MAX_HANDWRITING_STROKES && strokes.length > currentPageCount) {
+        accepted = false;
+        return current;
+      }
+      return setPageInkStrokes(current, pageId, strokes);
+    });
+    if (!accepted) {
+      Alert.alert('필기 한도 도달', `한 다이어리에는 최대 ${MAX_HANDWRITING_STROKES.toLocaleString()}개의 획을 저장할 수 있습니다.`);
+      return false;
+    }
+    return true;
+  }
+
   function openPanel(section: HandwritingPanelSection) {
     setPanelSection(section);
   }
@@ -380,8 +464,9 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
         <>
           <SectionTitle>페이지 관리</SectionTitle>
           <View style={styles.buttonRow}>
-            <PanelButton label="새 페이지" onPress={() => commit(addPage)} />
+            <PanelButton disabled={document!.pages.length >= MAX_HANDWRITING_PAGES} label="새 페이지" onPress={() => commit(addPage)} />
             <PanelButton
+              disabled={!canDuplicatePage(document!, selectedPage.id)}
               label="복제"
               onPress={() => commit((current) => duplicatePage(current, selectedPage.id))}
             />
@@ -392,6 +477,7 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
               onPress={confirmDeletePage}
             />
           </View>
+          <Text style={styles.helpText}>최대 {MAX_HANDWRITING_PAGES}페이지 · 현재 {document!.pages.length}페이지</Text>
           <Text style={styles.helpText}>페이지 카드를 좌우로 드래그하면 순서를 바꿀 수 있습니다.</Text>
           <View style={styles.pageGrid}>
             {document!.pages.map((page, index) => (
@@ -403,8 +489,10 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
                 }
                 onSelect={() => {
                   setSelectedLayerId(null);
-                  replaceWithoutHistory((current) => selectPage(current, page.id));
-                  setPanelSection(null);
+                  void captureCurrentThumbnail().catch(() => undefined).finally(() => {
+                    replaceWithoutHistory((current) => selectPage(current, page.id));
+                    setPanelSection(null);
+                  });
                 }}
                 page={page}
                 selected={page.id === selectedPage.id}
@@ -418,6 +506,14 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
     if (panelSection === 'style') {
       return (
         <>
+          <SectionTitle>도구</SectionTitle>
+          <View style={styles.buttonRow}>
+            <PanelButton disabled={!canRedo} label="다시 실행" onPress={redo} />
+            <PanelButton active={tool === 'pen'} label="펜" onPress={() => setTool('pen')} />
+            <PanelButton active={tool === 'highlighter'} label="마커" onPress={() => setTool('highlighter')} />
+            <PanelButton active={tool === 'select'} label="선택" onPress={() => setTool('select')} />
+            <PanelButton active={tool === 'navigate'} label="이동" onPress={() => setTool('navigate')} />
+          </View>
           <SectionTitle>잉크 색상</SectionTitle>
           <View style={styles.buttonRow}>
             {INK_COLORS.map((inkColor) => (
@@ -460,6 +556,21 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
     if (panelSection === 'paper') {
       return (
         <>
+          <SectionTitle>페이지 방향과 보기</SectionTitle>
+          <View style={styles.buttonRow}>
+            <PanelButton
+              label="왼쪽으로 회전"
+              onPress={() => commit((current) =>
+                rotatePage(current, selectedPage.id, 'counterclockwise'))}
+            />
+            <PanelButton
+              label="오른쪽으로 회전"
+              onPress={() => commit((current) =>
+                rotatePage(current, selectedPage.id, 'clockwise'))}
+            />
+            <PanelButton label="페이지에 맞추기" onPress={() => setViewportResetKey((key) => key + 1)} />
+            <PanelButton label="PNG 미리보기" onPress={() => void captureCurrentThumbnail().then((uri) => uri && setPreviewUri(uri))} />
+          </View>
           <SectionTitle>종이 프리셋</SectionTitle>
           <View style={styles.buttonRow}>
             {BACKGROUNDS.map(({ label, value }) => {
@@ -496,7 +607,7 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
               <PanelButton
                 key={photo.id}
                 label={`사진 ${index + 1}`}
-                onPress={() => addManagedImage(photo.fileUri, undefined, undefined)}
+                onPress={() => void addManagedImage(photo.fileUri)}
               />
             ))}
           </View>
@@ -507,7 +618,11 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
                 key={sticker.id}
                 label={sticker.label}
                 onPress={() => {
-                  commit((current) => addStickerLayer(current, selectedPage.id, sticker.id));
+                  const layerId = createHandwritingId('sticker-layer');
+                  commit((current) =>
+                    addStickerLayer(current, selectedPage.id, sticker.id, layerId),
+                  );
+                  setSelectedLayerId(layerId);
                   setTool('select');
                   setPanelSection('layers');
                 }}
@@ -528,31 +643,74 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
             {selectedPage.layers
               .filter((layer) => layer.type !== 'ink')
               .map((layer) => (
-                <PanelButton
-                  active={layer.id === selectedLayerId}
+                <Pressable
                   key={layer.id}
-                  label={layer.name}
                   onPress={() => {
                     setSelectedLayerId(layer.id);
                     setTool('select');
                   }}
-                />
+                  style={[
+                    styles.layerRow,
+                    layer.id === selectedLayerId && styles.layerRowActive,
+                  ]}
+                >
+                  {layer.type === 'image' ? (
+                    <Image source={{ uri: layer.asset.previewUri }} style={styles.layerPreview} />
+                  ) : (
+                    <View style={[styles.layerPreview, styles.stickerPreview]}>
+                      <Text>✦</Text>
+                    </View>
+                  )}
+                  <Text numberOfLines={1} style={styles.layerRowText}>{layer.name}</Text>
+                  <Text style={styles.layerFlags}>
+                    {layer.hidden ? '숨김 ' : ''}{layer.locked ? '잠김' : ''}
+                  </Text>
+                </Pressable>
               ))}
           </View>
         )}
         {selectedLayer && selectedLayer.type !== 'ink' ? (
           <>
             <SectionTitle>선택한 레이어 조정</SectionTitle>
+            <TextInput
+              defaultValue={selectedLayer.name}
+              key={`${selectedLayer.id}-${selectedLayer.name}`}
+              onEndEditing={(event) => {
+                const name = event.nativeEvent.text.trim();
+                if (!name || name === selectedLayer.name) return;
+                commit((current) => updateLayer(
+                  current,
+                  selectedPage.id,
+                  selectedLayer.id,
+                  (layer) => ({ ...layer, name }),
+                ));
+              }}
+              placeholder="레이어 이름"
+              style={styles.layerNameInput}
+            />
             <View style={styles.buttonRow}>
-              <PanelButton label="←" onPress={() => transformSelectedLayer((layer) => ({ ...layer, transform: { ...layer.transform, x: layer.transform.x - 20 } }))} />
-              <PanelButton label="→" onPress={() => transformSelectedLayer((layer) => ({ ...layer, transform: { ...layer.transform, x: layer.transform.x + 20 } }))} />
-              <PanelButton label="↑" onPress={() => transformSelectedLayer((layer) => ({ ...layer, transform: { ...layer.transform, y: layer.transform.y - 20 } }))} />
-              <PanelButton label="↓" onPress={() => transformSelectedLayer((layer) => ({ ...layer, transform: { ...layer.transform, y: layer.transform.y + 20 } }))} />
-              <PanelButton label="크게" onPress={() => transformSelectedLayer((layer) => ({ ...layer, transform: { ...layer.transform, scaleX: Math.min(4, layer.transform.scaleX * 1.1), scaleY: Math.min(4, layer.transform.scaleY * 1.1) } }))} />
-              <PanelButton label="작게" onPress={() => transformSelectedLayer((layer) => ({ ...layer, transform: { ...layer.transform, scaleX: Math.max(0.2, layer.transform.scaleX / 1.1), scaleY: Math.max(0.2, layer.transform.scaleY / 1.1) } }))} />
-              <PanelButton label="15° 회전" onPress={() => transformSelectedLayer((layer) => ({ ...layer, transform: { ...layer.transform, rotation: (layer.transform.rotation + 15) % 360 } }))} />
+              <PanelButton
+                active={selectedLayer.locked}
+                label={selectedLayer.locked ? '잠금 해제' : '잠금'}
+                onPress={() => commit((current) => updateLayer(current, selectedPage.id, selectedLayer.id, (layer) => ({ ...layer, locked: !layer.locked })))}
+              />
+              <PanelButton
+                active={selectedLayer.hidden}
+                label={selectedLayer.hidden ? '표시' : '숨김'}
+                onPress={() => commit((current) => updateLayer(current, selectedPage.id, selectedLayer.id, (layer) => ({ ...layer, hidden: !layer.hidden })))}
+              />
+              <PanelButton
+                label="복제"
+                onPress={() => {
+                  const duplicateId = createHandwritingId('layer');
+                  commit((current) => duplicateLayer(current, selectedPage.id, selectedLayer.id, duplicateId));
+                  setSelectedLayerId(duplicateId);
+                }}
+              />
               <PanelButton label="앞으로" onPress={() => commit((current) => moveLayer(current, selectedPage.id, selectedLayer.id, 1))} />
               <PanelButton label="뒤로" onPress={() => commit((current) => moveLayer(current, selectedPage.id, selectedLayer.id, -1))} />
+              <PanelButton label="맨 앞으로" onPress={() => commit((current) => moveLayerTo(current, selectedPage.id, selectedLayer.id, 'front'))} />
+              <PanelButton label="맨 뒤로" onPress={() => commit((current) => moveLayerTo(current, selectedPage.id, selectedLayer.id, 'back'))} />
               <PanelButton destructive label="삭제" onPress={() => { commit((current) => deleteLayer(current, selectedPage.id, selectedLayer.id)); setSelectedLayerId(null); }} />
             </View>
           </>
@@ -567,19 +725,18 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
         <Pressable accessibilityLabel="필기 편집기 닫기" onPress={closeEditor} style={styles.headerButton}>
           <Text style={styles.headerButtonText}>‹</Text>
         </Pressable>
-        <View style={styles.headerCenter}>
+        <Pressable
+          accessibilityLabel={saveStatus === 'error' ? '저장 다시 시도' : undefined}
+          disabled={saveStatus !== 'error'}
+          onPress={() => void retrySave(true).catch(() => undefined)}
+          style={styles.headerCenter}
+        >
           <Text numberOfLines={1} style={styles.headerTitle}>{diary.title}</Text>
           <Text style={[styles.saveStatus, saveStatus === 'error' && styles.saveError]}>
-            {SAVE_LABELS[saveStatus]}
+            {SAVE_LABELS[saveStatus]}{saveStatus === 'error' ? ' · 다시 시도' : ''}
           </Text>
-        </View>
-        <Pressable
-          accessibilityLabel="PNG 미리보기"
-          onPress={() => void captureCurrentThumbnail().then((uri) => uri && setPreviewUri(uri))}
-          style={styles.headerButton}
-        >
-          <Text style={styles.previewButtonText}>▣</Text>
         </Pressable>
+        <View style={styles.headerButton} />
       </View>
 
       <View
@@ -590,8 +747,10 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
         style={styles.workspace}
       >
         <EditorViewport
+          deferSingleTouch={tool === 'select'}
           fingerNavigationOnly={nativeInkActive && !fingerDrawing}
-          navigationEnabled={tool === 'navigate' || (nativeInkActive && !fingerDrawing)}
+          navigationEnabled={tool === 'navigate' || tool === 'select' || (nativeInkActive && !fingerDrawing)}
+          resetKey={viewportResetKey}
         >
           <View
             onLayout={(event: LayoutChangeEvent) => {
@@ -606,42 +765,49 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
               background={selectedPage.background}
               color={color}
               layers={selectedPage.layers}
-              onStrokesChange={(strokes) =>
-                commit((current) => setPageInkStrokes(current, selectedPage.id, strokes))
-              }
+              onStrokesChange={(strokes) => commitInkStrokes(selectedPage.id, strokes)}
               pageHeight={selectedPage.height}
               pageWidth={selectedPage.width}
-              renderInk={!nativeInkActive}
+              renderInk={!supportsNativeInkInput}
               strokes={getPageInkStrokes(selectedPage)}
               tool={tool}
               width={strokeWidth}
             />
-            {nativeInkActive ? (
+            {supportsNativeInkInput ? (
               <InkInputAdapter
                 color={color}
+                enabled={nativeInkActive}
                 fingerDrawing={fingerDrawing}
-                onStrokesChange={(strokes) =>
-                  commit((current) => setPageInkStrokes(current, selectedPage.id, strokes))
-                }
+                onStrokesChange={commitInkStrokes}
+                onError={(error) => Alert.alert('필기 입력 오류', error.message)}
                 pageHeight={selectedPage.height}
+                pageId={selectedPage.id}
                 pageWidth={selectedPage.width}
                 strokes={getPageInkStrokes(selectedPage)}
                 tool={tool}
                 width={strokeWidth}
               />
             ) : null}
-            {tool === 'select' && selectedLayer && selectedLayer.type !== 'ink' ? (
-              <LayerDragOverlay
+            {tool === 'select' ? (
+              <Pressable
+                accessibilityLabel="레이어 선택 영역"
+                onPress={(event) => {
+                  const hit = getTopmostEditableLayerAtPoint(selectedPage, {
+                    x: (event.nativeEvent.locationX / Math.max(1, renderedPageSize.width)) *
+                      selectedPage.width,
+                    y: (event.nativeEvent.locationY / Math.max(1, renderedPageSize.height)) *
+                      selectedPage.height,
+                  });
+                  setSelectedLayerId(hit?.id ?? null);
+                }}
+                style={StyleSheet.absoluteFill}
+              />
+            ) : null}
+            {tool === 'select' && selectedLayer && selectedLayer.type !== 'ink' && !selectedLayer.locked && !selectedLayer.hidden ? (
+              <LayerTransformOverlay
                 layer={selectedLayer}
-                onMove={(deltaX, deltaY) =>
-                  transformSelectedLayer((layer) => ({
-                    ...layer,
-                    transform: {
-                      ...layer.transform,
-                      x: layer.transform.x + deltaX,
-                      y: layer.transform.y + deltaY,
-                    },
-                  }))
+                onCommit={(transform) =>
+                  transformSelectedLayer((layer) => ({ ...layer, transform }))
                 }
                 pageHeight={selectedPage.height}
                 pageWidth={selectedPage.width}
@@ -654,13 +820,10 @@ export function HandwritingPrototypeScreen({ navigation, route }: Props) {
 
         <View pointerEvents="box-none" style={[styles.toolbarPosition, tablet ? styles.toolbarTablet : styles.toolbarPhone]}>
           <HandwritingToolbar
-            canRedo={canRedo}
             canUndo={canUndo}
             color={color}
             compact={!tablet}
-            onOpenMore={() => openPanel('paper')}
-            onOpenStyle={() => openPanel('style')}
-            onRedo={redo}
+            onOpenMore={() => openPanel('style')}
             onToolChange={setTool}
             onUndo={undo}
             tool={tool}
@@ -718,6 +881,13 @@ const styles = StyleSheet.create({
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '800', maxWidth: '100%' },
   saveStatus: { color: colors.textMuted, fontSize: 10, marginTop: 1 },
   saveError: { color: '#B42318' },
+  layerRow: { alignItems: 'center', borderColor: colors.border, borderRadius: 12, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, padding: spacing.sm },
+  layerRowActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  layerPreview: { backgroundColor: '#EEE8E2', borderRadius: 6, height: 40, width: 40 },
+  stickerPreview: { alignItems: 'center', justifyContent: 'center' },
+  layerRowText: { color: colors.text, flex: 1, fontSize: 14, fontWeight: '700' },
+  layerFlags: { color: colors.textMuted, fontSize: 11 },
+  layerNameInput: { backgroundColor: '#FFFFFF', borderColor: colors.border, borderRadius: 10, borderWidth: 1, color: colors.text, fontSize: 14, paddingHorizontal: 12, paddingVertical: 10 },
   workspace: { flex: 1, overflow: 'hidden' },
   pageCanvas: { backgroundColor: '#FFFFFF', borderColor: '#DED7D1', borderRadius: 5, borderWidth: 1, overflow: 'hidden', ...shadows.medium },
   toolbarPosition: { left: 0, position: 'absolute', right: 0 },

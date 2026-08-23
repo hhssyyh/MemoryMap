@@ -224,9 +224,9 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
         {isTablet() ? (
           <>
             <Pressable
-              accessibilityLabel="손글씨 프로토타입"
+              accessibilityLabel="손글씨 편집기"
               accessibilityRole="button"
-              onPress={() => navigation.navigate('HandwritingPrototype', { diary })}
+              onPress={() => navigation.navigate('HandwritingEditor', { diary })}
               style={({ pressed }) => [styles.action, pressed && styles.pressed]}
             >
               <Text style={styles.actionIcon}>✎</Text>

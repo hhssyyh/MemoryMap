@@ -1,27 +1,16 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, shadows, spacing } from '../../constants/theme';
 import type { EditorTool } from './SkiaInkCanvas';
-
-const TOOLS: Array<{ value: EditorTool; symbol: string; label: string }> = [
-  { value: 'pen', symbol: '✎', label: '펜' },
-  { value: 'highlighter', symbol: '▰', label: '마커' },
-  { value: 'eraser', symbol: '◇', label: '지우개' },
-  { value: 'select', symbol: '↖', label: '선택' },
-  { value: 'navigate', symbol: '✋', label: '이동' },
-];
 
 type Props = {
   tool: EditorTool;
   color: string;
   width: number;
   canUndo: boolean;
-  canRedo: boolean;
   compact: boolean;
   onToolChange: (tool: EditorTool) => void;
   onUndo: () => void;
-  onRedo: () => void;
-  onOpenStyle: () => void;
   onOpenMore: () => void;
 };
 
@@ -64,45 +53,33 @@ export function HandwritingToolbar({
   color,
   width,
   canUndo,
-  canRedo,
   compact,
   onToolChange,
   onUndo,
-  onRedo,
-  onOpenStyle,
   onOpenMore,
 }: Props) {
+  const currentDrawingTool = tool === 'highlighter' ? 'highlighter' : 'pen';
+  const drawingLabel = currentDrawingTool === 'highlighter' ? '마커' : '펜';
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-      >
+      <View style={styles.content}>
         <ToolButton compact={compact} disabled={!canUndo} label="실행 취소" onPress={onUndo} symbol="↶" />
-        <ToolButton compact={compact} disabled={!canRedo} label="다시 실행" onPress={onRedo} symbol="↷" />
-        <View style={styles.divider} />
-        {TOOLS.map((item) => (
-          <ToolButton
-            active={tool === item.value}
-            compact={compact}
-            key={item.value}
-            label={item.label}
-            onPress={() => onToolChange(item.value)}
-            symbol={item.symbol}
-          />
-        ))}
         <View style={styles.divider} />
         <Pressable
-          accessibilityLabel="펜 스타일"
-          onPress={onOpenStyle}
-          style={[styles.styleButton, compact && styles.styleButtonCompact]}
+          accessibilityLabel={`현재 도구 ${drawingLabel}`}
+          onPress={() => onToolChange(currentDrawingTool)}
+          style={[
+            styles.styleButton,
+            compact && styles.styleButtonCompact,
+            tool === currentDrawingTool && styles.toolActive,
+          ]}
         >
           <View style={[styles.color, { backgroundColor: color }]} />
-          {!compact ? <Text style={styles.width}>{width}px</Text> : null}
+          <Text style={styles.width}>{compact ? drawingLabel : `${drawingLabel} ${width}px`}</Text>
         </Pressable>
+        <ToolButton active={tool === 'eraser'} compact={compact} label="지우개" onPress={() => onToolChange('eraser')} symbol="◇" />
         <ToolButton compact={compact} label="더 보기" onPress={onOpenMore} symbol="•••" />
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -120,7 +97,7 @@ const styles = StyleSheet.create({
     ...shadows.medium,
   },
   containerCompact: { borderRadius: 16, maxWidth: '100%' },
-  content: { alignItems: 'center', gap: 3 },
+  content: { alignItems: 'center', flexDirection: 'row', gap: 3 },
   tool: { alignItems: 'center', borderRadius: 12, minWidth: 52, paddingHorizontal: 8, paddingVertical: 6 },
   toolCompact: { minWidth: 34, paddingHorizontal: 4, paddingVertical: 8 },
   toolActive: { backgroundColor: colors.primarySoft },

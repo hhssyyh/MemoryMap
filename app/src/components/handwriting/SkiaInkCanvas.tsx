@@ -21,6 +21,7 @@ import {
 } from '@shopify/react-native-skia';
 
 import { buildInkStroke } from '../../utils/handwriting';
+import { getPatternPositions } from '../../utils/handwritingPaper';
 import type {
   HandwritingLayer,
   ImageLayer,
@@ -56,17 +57,23 @@ function strokeTouchesPoint(stroke: InkStroke, point: InkPoint, threshold: numbe
 function BackgroundPattern({
   background,
   size,
+  pageWidth,
+  pageHeight,
 }: {
   background: PageBackground;
   size: CanvasSize;
+  pageWidth: number;
+  pageHeight: number;
 }) {
+  const scaleX = size.width / pageWidth;
+  const scaleY = size.height / pageHeight;
   const horizontal = useMemo(
-    () => Array.from({ length: Math.floor(size.height / 28) }, (_, index) => (index + 1) * 28),
-    [size.height],
+    () => getPatternPositions(pageHeight).map((position) => position * scaleY),
+    [pageHeight, scaleY],
   );
   const vertical = useMemo(
-    () => Array.from({ length: Math.floor(size.width / 28) }, (_, index) => (index + 1) * 28),
-    [size.width],
+    () => getPatternPositions(pageWidth).map((position) => position * scaleX),
+    [pageWidth, scaleX],
   );
 
   if (background.type !== 'preset') return null;
@@ -82,9 +89,19 @@ function BackgroundPattern({
   return null;
 }
 
-function BackgroundImage({ uri, size }: { uri: string; size: CanvasSize }) {
+function BackgroundImage({ uri, size, rotation }: { uri: string; size: CanvasSize; rotation: 0 | 90 | 180 | 270 }) {
   const image = useImage(uri);
-  return image ? <SkiaImage image={image} x={0} y={0} width={size.width} height={size.height} fit="cover" /> : null;
+  if (!image) return null;
+  const sideways = rotation === 90 || rotation === 270;
+  const width = sideways ? size.height : size.width;
+  const height = sideways ? size.width : size.height;
+  const x = (size.width - width) / 2;
+  const y = (size.height - height) / 2;
+  return (
+    <Group origin={vec(size.width / 2, size.height / 2)} transform={[{ rotate: (rotation * Math.PI) / 180 }]}>
+      <SkiaImage image={image} x={x} y={y} width={width} height={height} fit="cover" />
+    </Group>
+  );
 }
 
 function InkLayerContent({ layer, scaleX, scaleY, visible }: { layer: InkLayer; scaleX: number; scaleY: number; visible: boolean }) {
@@ -97,7 +114,7 @@ function InkLayerContent({ layer, scaleX, scaleY, visible }: { layer: InkLayer; 
 }
 
 function ImageLayerContent({ layer, scaleX, scaleY }: { layer: ImageLayer; scaleX: number; scaleY: number }) {
-  const image = useImage(layer.assetUri);
+  const image = useImage(layer.asset.previewUri);
   if (!image || layer.hidden) return null;
   const x = layer.transform.x * scaleX;
   const y = layer.transform.y * scaleY;
@@ -133,13 +150,14 @@ function StickerLayerContent({ layer, scaleX, scaleY }: { layer: StickerLayer; s
   const y = layer.transform.y * scaleY;
   return (
     <Group
-      origin={vec(50, 50)}
       transform={[
-        { translateX: x },
-        { translateY: y },
+        { translateX: x + width / 2 },
+        { translateY: y + height / 2 },
+        { rotate: (layer.transform.rotation * Math.PI) / 180 },
         { scaleX: width / 100 },
         { scaleY: height / 100 },
-        { rotate: (layer.transform.rotation * Math.PI) / 180 },
+        { translateX: -50 },
+        { translateY: -50 },
       ]}
     >
       <Path path={path} color={STICKER_COLORS[layer.stickerId] ?? '#E8788E'} />
@@ -273,9 +291,31 @@ export const SkiaInkCanvas = forwardRef<SkiaInkCanvasHandle, SkiaInkCanvasProps>
   return (
     <View style={[styles.container, { backgroundColor }]} onLayout={handleLayout}>
       <Canvas ref={canvasRef} style={styles.canvas} {...panResponder.panHandlers}>
-        {background.type === 'image' ? <BackgroundImage uri={background.assetUri} size={canvasSize} /> : null}
-        <BackgroundPattern background={background} size={canvasSize} />
-        {layers.map((layer) => <LayerContent key={layer.id} layer={layer} scaleX={scaleX} scaleY={scaleY} inkVisible={renderInk || snapshotMode} />)}
+        {background.type === 'image' ? <BackgroundImage uri={background.asset.previewUri} rotation={background.rotation} size={canvasSize} /> : null}
+        <BackgroundPattern
+          background={background}
+          size={canvasSize}
+          pageWidth={pageWidth}
+          pageHeight={pageHeight}
+        />
+        {layers.filter((layer) => layer.type !== 'ink').map((layer) => (
+          <LayerContent
+            key={layer.id}
+            layer={layer}
+            scaleX={scaleX}
+            scaleY={scaleY}
+            inkVisible={renderInk || snapshotMode}
+          />
+        ))}
+        {layers.filter((layer) => layer.type === 'ink').map((layer) => (
+          <LayerContent
+            key={layer.id}
+            layer={layer}
+            scaleX={scaleX}
+            scaleY={scaleY}
+            inkVisible={renderInk || snapshotMode}
+          />
+        ))}
         {currentPoints.length > 1 ? (
           <Path
             path={currentPath}
