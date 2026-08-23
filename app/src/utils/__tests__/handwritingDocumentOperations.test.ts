@@ -4,6 +4,9 @@ import {
   addStickerLayer,
   assertHandwritingDocumentLimits,
   canDuplicatePage,
+  canAddEditableLayer,
+  countDocumentInkPoints,
+  deleteLayer,
   countDocumentInkStrokes,
   deletePage,
   duplicateLayer,
@@ -20,7 +23,13 @@ import {
   constrainLayerTransform,
 } from '../handwritingDocument';
 import { createHandwritingDocument } from '../handwriting';
-import { MAX_HANDWRITING_PAGES, MAX_HANDWRITING_STROKES } from '../../types/handwriting';
+import {
+  MAX_HANDWRITING_EDITABLE_LAYERS_PER_PAGE,
+  MAX_HANDWRITING_PAGES,
+  MAX_HANDWRITING_POINTS,
+  MAX_HANDWRITING_POINTS_PER_STROKE,
+  MAX_HANDWRITING_STROKES,
+} from '../../types/handwriting';
 
 const photoAsset = {
   originalUri: 'file:///photo-original.jpg',
@@ -210,6 +219,43 @@ describe('handwriting page operations', () => {
 
     expect(canDuplicatePage(document, pageId)).toBe(false);
     expect(duplicatePage(document, pageId)).toBe(document);
+  });
+
+  it('rejects point growth over the limits while still allowing erasing', () => {
+    const initial = createHandwritingDocument('diary-1');
+    const pageId = initial.selectedPageId;
+    const oversized = [{
+      id: 'large', tool: 'pen' as const, color: '#000', width: 1, opacity: 1,
+      points: Array.from({ length: MAX_HANDWRITING_POINTS_PER_STROKE + 1 }, (_, index) =>
+        ({ x: index, y: index, timestamp: index })),
+    }];
+    expect(setPageInkStrokes(initial, pageId, oversized)).toBe(initial);
+
+    const strokes = Array.from({ length: 25 }, (_, strokeIndex) => ({
+      id: `stroke-${strokeIndex}`, tool: 'pen' as const, color: '#000', width: 1, opacity: 1,
+      points: Array.from({ length: MAX_HANDWRITING_POINTS / 25 }, (_, index) =>
+        ({ x: index, y: strokeIndex, timestamp: index })),
+    }));
+    const full = setPageInkStrokes(initial, pageId, strokes);
+    expect(countDocumentInkPoints(full)).toBe(MAX_HANDWRITING_POINTS);
+    expect(setPageInkStrokes(full, pageId, [
+      ...strokes,
+      { id: 'overflow', tool: 'pen', color: '#000', width: 1, opacity: 1, points: [{ x: 0, y: 0, timestamp: 0 }] },
+    ])).toBe(full);
+    expect(countDocumentInkPoints(setPageInkStrokes(full, pageId, strokes.slice(0, -1))))
+      .toBeLessThan(MAX_HANDWRITING_POINTS);
+  });
+
+  it('bounds editable layers without blocking deletion', () => {
+    const initial = createHandwritingDocument('diary-1');
+    const pageId = initial.selectedPageId;
+    let document = initial;
+    for (let index = 0; index < MAX_HANDWRITING_EDITABLE_LAYERS_PER_PAGE; index += 1) {
+      document = addStickerLayer(document, pageId, 'heart', `sticker-${index}`);
+    }
+    expect(canAddEditableLayer(document, pageId)).toBe(false);
+    expect(addImageLayer(document, pageId, photoAsset)).toBe(document);
+    expect(deleteLayer(document, pageId, 'sticker-0')).not.toBe(document);
   });
 
   it('rejects over-limit documents at the persistence boundary', () => {

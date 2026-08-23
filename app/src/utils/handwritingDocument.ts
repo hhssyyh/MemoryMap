@@ -9,7 +9,11 @@ import type {
 } from '../types/handwriting';
 import {
   MAX_HANDWRITING_PAGES,
+  MAX_HANDWRITING_POINTS,
+  MAX_HANDWRITING_POINTS_PER_STROKE,
   MAX_HANDWRITING_STROKES,
+  MAX_HANDWRITING_EDITABLE_LAYERS,
+  MAX_HANDWRITING_EDITABLE_LAYERS_PER_PAGE,
 } from '../types/handwriting';
 import { createHandwritingPage, duplicateHandwritingPage } from './handwriting';
 import { createHandwritingId } from './handwriting';
@@ -109,6 +113,16 @@ export function setPageInkStrokes(
   const currentTotal = countDocumentInkStrokes(document);
   const nextTotal = currentTotal - currentPageCount + strokes.length;
   if (nextTotal > MAX_HANDWRITING_STROKES && nextTotal > currentTotal) return document;
+  const currentPoints = countDocumentInkPoints(document);
+  const currentPagePoints = countInkPoints(getPageInkStrokes(currentPage));
+  const nextPoints = currentPoints - currentPagePoints + countInkPoints(strokes);
+  if (nextPoints > MAX_HANDWRITING_POINTS && nextPoints >= currentPoints) return document;
+  const currentPointCountById = new Map(
+    getPageInkStrokes(currentPage).map((stroke) => [stroke.id, stroke.points.length]),
+  );
+  if (strokes.some((stroke) =>
+    stroke.points.length > MAX_HANDWRITING_POINTS_PER_STROKE &&
+    stroke.points.length > (currentPointCountById.get(stroke.id) ?? 0))) return document;
   return replacePage(document, pageId, (page) => ({
     ...page,
     layers: page.layers.map((layer) =>
@@ -139,12 +153,39 @@ export function countDocumentInkStrokes(document: HandwritingDocument): number {
   return document.pages.reduce((total, page) => total + getPageInkStrokes(page).length, 0);
 }
 
+export function countInkPoints(strokes: InkStroke[]): number {
+  return strokes.reduce((total, stroke) => total + stroke.points.length, 0);
+}
+
+export function countDocumentInkPoints(document: HandwritingDocument): number {
+  return document.pages.reduce(
+    (total, page) => total + countInkPoints(getPageInkStrokes(page)),
+    0,
+  );
+}
+
+function countEditableLayers(page: HandwritingPage): number {
+  return page.layers.filter((layer) => layer.type !== 'ink').length;
+}
+
+function countDocumentEditableLayers(document: HandwritingDocument): number {
+  return document.pages.reduce((total, page) => total + countEditableLayers(page), 0);
+}
+
+export function canAddEditableLayer(document: HandwritingDocument, pageId: string): boolean {
+  const page = document.pages.find((candidate) => candidate.id === pageId);
+  if (!page) return false;
+  return countEditableLayers(page) < MAX_HANDWRITING_EDITABLE_LAYERS_PER_PAGE &&
+    countDocumentEditableLayers(document) < MAX_HANDWRITING_EDITABLE_LAYERS;
+}
+
 export function canDuplicatePage(document: HandwritingDocument, pageId: string): boolean {
   if (document.pages.length >= MAX_HANDWRITING_PAGES) return false;
   const source = document.pages.find((page) => page.id === pageId);
   if (!source) return false;
-  return countDocumentInkStrokes(document) + getPageInkStrokes(source).length <=
-    MAX_HANDWRITING_STROKES;
+  return countDocumentInkStrokes(document) + getPageInkStrokes(source).length <= MAX_HANDWRITING_STROKES &&
+    countDocumentInkPoints(document) + countInkPoints(getPageInkStrokes(source)) <= MAX_HANDWRITING_POINTS &&
+    countDocumentEditableLayers(document) + countEditableLayers(source) <= MAX_HANDWRITING_EDITABLE_LAYERS;
 }
 
 /** Persistence boundary guard for limits that every document mutation must preserve. */
@@ -155,6 +196,19 @@ export function assertHandwritingDocumentLimits(document: HandwritingDocument): 
   if (countDocumentInkStrokes(document) > MAX_HANDWRITING_STROKES) {
     throw new Error(`A handwriting document may contain at most ${MAX_HANDWRITING_STROKES} strokes.`);
   }
+  if (countDocumentInkPoints(document) > MAX_HANDWRITING_POINTS) {
+    throw new Error(`A handwriting document may contain at most ${MAX_HANDWRITING_POINTS} ink points.`);
+  }
+  if (document.pages.some((page) =>
+    getPageInkStrokes(page).some((stroke) => stroke.points.length > MAX_HANDWRITING_POINTS_PER_STROKE))) {
+    throw new Error(`A handwriting stroke may contain at most ${MAX_HANDWRITING_POINTS_PER_STROKE} points.`);
+  }
+  if (document.pages.some((page) => countEditableLayers(page) > MAX_HANDWRITING_EDITABLE_LAYERS_PER_PAGE)) {
+    throw new Error(`A handwriting page may contain at most ${MAX_HANDWRITING_EDITABLE_LAYERS_PER_PAGE} editable layers.`);
+  }
+  if (countDocumentEditableLayers(document) > MAX_HANDWRITING_EDITABLE_LAYERS) {
+    throw new Error(`A handwriting document may contain at most ${MAX_HANDWRITING_EDITABLE_LAYERS} editable layers.`);
+  }
 }
 
 export function addImageLayer(
@@ -163,6 +217,7 @@ export function addImageLayer(
   asset: ImageAssetReference,
   layerId = createHandwritingId('image-layer'),
 ): HandwritingDocument {
+  if (!canAddEditableLayer(document, pageId)) return document;
   return replacePage(document, pageId, (page) => {
     const sourceWidth = asset.pixelWidth;
     const sourceHeight = asset.pixelHeight;
@@ -198,6 +253,7 @@ export function addStickerLayer(
   stickerId: string,
   layerId = createHandwritingId('sticker-layer'),
 ): HandwritingDocument {
+  if (!canAddEditableLayer(document, pageId)) return document;
   return replacePage(document, pageId, (page) => {
     const size = page.width * 0.18;
     const layer: HandwritingLayer = {
@@ -276,6 +332,7 @@ export function duplicateLayer(
   layerId: string,
   duplicateId = createHandwritingId('layer'),
 ): HandwritingDocument {
+  if (!canAddEditableLayer(document, pageId)) return document;
   return replacePage(document, pageId, (page) => {
     const index = page.layers.findIndex((layer) => layer.id === layerId && layer.type !== 'ink');
     if (index < 0) return page;

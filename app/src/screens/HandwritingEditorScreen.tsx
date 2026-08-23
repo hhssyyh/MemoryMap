@@ -35,6 +35,7 @@ import {
 import { colors, shadows, spacing } from '../constants/theme';
 import {
   cleanupHandwritingAssets,
+  HandwritingAssetLimitError,
   importHandwritingAsset,
   writeHandwritingThumbnail,
 } from '../data/handwritingAssetFiles';
@@ -53,6 +54,7 @@ import {
   addImageLayer,
   addPage,
   addStickerLayer,
+  canAddEditableLayer,
   canDuplicatePage,
   deleteLayer,
   deletePage,
@@ -225,6 +227,7 @@ export function HandwritingEditorScreen({ navigation, route }: Props) {
     redo,
     saveNow,
     retrySave,
+    retryLoad,
   } = useHandwritingEditor(diary.id);
   documentRef.current = document;
 
@@ -258,7 +261,13 @@ export function HandwritingEditorScreen({ navigation, route }: Props) {
         afterPage.contentRevision !== contentRevision
       ) return undefined;
 
-      const uri = writeHandwritingThumbnail(diary.id, requestedDocument.id, pageId, bytes);
+      const uri = writeHandwritingThumbnail(
+        diary.id,
+        requestedDocument.id,
+        pageId,
+        contentRevision,
+        bytes,
+      );
       // Captures are serialized and only committed while page ID and content
       // revision still match, preventing a snapshot from being attached elsewhere.
       replaceWithoutHistory((current) => setPageThumbnail(current, pageId, uri), false);
@@ -326,9 +335,12 @@ export function HandwritingEditorScreen({ navigation, route }: Props) {
     if (!thumbnailContentKey || saveStatus !== 'dirty') return;
     if (lastThumbnailContent.current === thumbnailContentKey) return;
     const timer = setTimeout(() => {
-      lastThumbnailContent.current = thumbnailContentKey;
       void captureCurrentThumbnail()
-        .then(() => saveNow(true))
+        .then((uri) => {
+          if (!uri) return;
+          lastThumbnailContent.current = thumbnailContentKey;
+          return saveNow(true);
+        })
         .catch(() => undefined);
     }, 700);
     return () => clearTimeout(timer);
@@ -337,8 +349,19 @@ export function HandwritingEditorScreen({ navigation, route }: Props) {
   if (!document) {
     return (
       <View style={[styles.screen, styles.centered]}>
-        <ActivityIndicator color={colors.primary} size="large" />
-        <Text style={styles.loadingText}>{SAVE_LABELS[saveStatus]}</Text>
+        {saveStatus === 'error' ? (
+          <>
+            <Text style={styles.loadErrorTitle}>필기 문서를 불러오지 못했습니다</Text>
+            <Pressable onPress={retryLoad} style={styles.retryButton}>
+              <Text style={styles.retryButtonText}>다시 시도</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <ActivityIndicator color={colors.primary} size="large" />
+            <Text style={styles.loadingText}>{SAVE_LABELS[saveStatus]}</Text>
+          </>
+        )}
       </View>
     );
   }
@@ -380,6 +403,10 @@ export function HandwritingEditorScreen({ navigation, route }: Props) {
     sourceUri: string,
     useAsBackground = false,
   ) {
+    if (!canAddEditableLayer(document!, selectedPage.id) && !useAsBackground) {
+      Alert.alert('레이어 한도 도달', '이 페이지에는 사진과 스티커를 더 추가할 수 없습니다.');
+      return;
+    }
     try {
       const asset = await importHandwritingAsset(diary.id, document!.id, sourceUri);
       if (useAsBackground) {
@@ -395,8 +422,13 @@ export function HandwritingEditorScreen({ navigation, route }: Props) {
         setTool('select');
       }
       setPanelSection(null);
-    } catch {
-      Alert.alert('이미지 추가 실패', '이미지를 필기 문서로 복사하지 못했습니다.');
+    } catch (error) {
+      Alert.alert(
+        '이미지 추가 실패',
+        error instanceof HandwritingAssetLimitError
+          ? error.message
+          : '이미지를 필기 문서로 복사하지 못했습니다.',
+      );
     }
   }
 
@@ -445,10 +477,15 @@ export function HandwritingEditorScreen({ navigation, route }: Props) {
         accepted = false;
         return current;
       }
-      return setPageInkStrokes(current, pageId, strokes);
+      const next = setPageInkStrokes(current, pageId, strokes);
+      if (next === current) accepted = false;
+      return next;
     });
     if (!accepted) {
-      Alert.alert('필기 한도 도달', `한 다이어리에는 최대 ${MAX_HANDWRITING_STROKES.toLocaleString()}개의 획을 저장할 수 있습니다.`);
+      Alert.alert(
+        '필기 한도 도달',
+        `한 다이어리에는 최대 ${MAX_HANDWRITING_STROKES.toLocaleString()}개의 획과 제한된 수의 필기점을 저장할 수 있습니다.`,
+      );
       return false;
     }
     return true;
@@ -617,6 +654,7 @@ export function HandwritingEditorScreen({ navigation, route }: Props) {
               <PanelButton
                 key={sticker.id}
                 label={sticker.label}
+                disabled={!canAddEditableLayer(document!, selectedPage.id)}
                 onPress={() => {
                   const layerId = createHandwritingId('sticker-layer');
                   commit((current) =>
@@ -872,6 +910,9 @@ const styles = StyleSheet.create({
   screen: { backgroundColor: '#EDE9E4', flex: 1 },
   centered: { alignItems: 'center', justifyContent: 'center' },
   loadingText: { color: colors.textMuted, marginTop: spacing.md },
+  loadErrorTitle: { color: colors.text, fontSize: 17, fontWeight: '700', marginBottom: spacing.md },
+  retryButton: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  retryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   header: { alignItems: 'center', backgroundColor: 'rgba(248, 244, 239, 0.96)', borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', height: 56, justifyContent: 'space-between', paddingHorizontal: spacing.md, zIndex: 3 },
   headerPhone: { height: 50, paddingHorizontal: spacing.sm },
   headerButton: { alignItems: 'center', height: 40, justifyContent: 'center', width: 44 },

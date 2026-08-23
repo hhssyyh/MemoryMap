@@ -19,6 +19,7 @@ export function useHandwritingEditor(diaryId: string) {
   const [history, setHistory] = useState<EditorHistory<HandwritingDocument> | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('loading');
   const [revision, setRevision] = useState(0);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const historyRef = useRef(history);
   const saverRef = useRef(new SerializedDocumentSaver<HandwritingDocument>());
 
@@ -28,6 +29,10 @@ export function useHandwritingEditor(diaryId: string) {
 
   useEffect(() => {
     let cancelled = false;
+    historyRef.current = null;
+    saverRef.current.reset();
+    setHistory(null);
+    setRevision(0);
     setSaveStatus('loading');
     handwritingRepository
       .loadOrCreate(diaryId)
@@ -49,7 +54,9 @@ export function useHandwritingEditor(diaryId: string) {
     return () => {
       cancelled = true;
     };
-  }, [diaryId]);
+  }, [diaryId, loadAttempt]);
+
+  const retryLoad = useCallback(() => setLoadAttempt((attempt) => attempt + 1), []);
 
   const markChanged = useCallback(() => {
     const nextRevision = saverRef.current.markChanged();
@@ -155,5 +162,6 @@ export function useHandwritingEditor(diaryId: string) {
     redo,
     saveNow,
     retrySave: saveNow,
+    retryLoad,
   };
 }

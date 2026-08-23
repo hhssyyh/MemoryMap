@@ -4,6 +4,12 @@ export const DEFAULT_PAGE_WIDTH = 900;
 export const DEFAULT_PAGE_HEIGHT = 1200;
 export const MAX_HANDWRITING_PAGES = 10;
 export const MAX_HANDWRITING_STROKES = 1000;
+export const MAX_HANDWRITING_POINTS_PER_STROKE = 20_000;
+export const MAX_HANDWRITING_POINTS = 250_000;
+export const MAX_HANDWRITING_EDITABLE_LAYERS_PER_PAGE = 30;
+export const MAX_HANDWRITING_EDITABLE_LAYERS = 150;
+export const MAX_HANDWRITING_ASSET_BYTES = 40 * 1024 * 1024;
+export const MAX_HANDWRITING_ASSET_TOTAL_BYTES = 250 * 1024 * 1024;
 
 export type { InkPoint, InkStroke } from 'native-ink-view';
 import type { InkStroke } from 'native-ink-view';

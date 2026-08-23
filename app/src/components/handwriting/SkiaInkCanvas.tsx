@@ -213,11 +213,14 @@ export const SkiaInkCanvas = forwardRef<SkiaInkCanvasHandle, SkiaInkCanvasProps>
   useImperativeHandle(forwardedRef, () => ({
     async makePngSnapshot() {
       setSnapshotMode(true);
-      await nextFrame();
-      await nextFrame();
-      const image = await canvasRef.current?.makeImageSnapshotAsync();
-      setSnapshotMode(false);
-      return image?.encodeToBytes() ?? null;
+      try {
+        await nextFrame();
+        await nextFrame();
+        const image = await canvasRef.current?.makeImageSnapshotAsync();
+        return image?.encodeToBytes() ?? null;
+      } finally {
+        setSnapshotMode(false);
+      }
     },
   }), [canvasRef]);
 
