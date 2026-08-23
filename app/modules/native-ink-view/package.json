@@ -1,7 +1,7 @@
 {
   "name": "native-ink-view",
-  "version": "1.0.0",
-  "description": "Native ink/stylus input view (PencilKit on iOS, MotionEvent stylus on Android)",
+  "version": "0.1.0-private",
+  "description": "Typed cross-platform ink view contract backed by PencilKit and Jetpack Ink",
   "main": "src/index.ts",
   "license": "MIT",
   "author": "MemoryMap",

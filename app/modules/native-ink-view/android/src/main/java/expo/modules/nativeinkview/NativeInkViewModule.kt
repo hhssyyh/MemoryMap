@@ -8,12 +8,22 @@ class NativeInkViewModule : Module() {
     Name("NativeInkView")
 
     View(NativeInkView::class) {
-      // No native drawing-policy equivalent on Android; accepted only for prop-shape parity with iOS.
-      Prop("drawingPolicy") { _: NativeInkView, _: String -> }
-      Prop("clearTrigger") { view: NativeInkView, trigger: Int ->
-        view.handleClearTrigger(trigger)
+      Prop("inputMode") { view: NativeInkView, mode: String ->
+        view.setInputMode(mode)
       }
-      Events("onDrawingChange")
+      Prop("snapshotJson") { view: NativeInkView, json: String ->
+        view.setSnapshotJson(json)
+      }
+      Prop("selectedTool") { view: NativeInkView, tool: String ->
+        view.setSelectedTool(tool)
+      }
+      Prop("selectedColor") { view: NativeInkView, color: String ->
+        view.setSelectedColor(color)
+      }
+      Prop("selectedWidth") { view: NativeInkView, width: Double ->
+        view.setSelectedWidth(width)
+      }
+      Events("onInkChange", "onReady", "onCapabilities", "onError")
     }
   }
 }

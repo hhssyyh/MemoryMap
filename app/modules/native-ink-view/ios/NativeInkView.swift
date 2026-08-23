@@ -1,21 +1,28 @@
 import ExpoModulesCore
 import PencilKit
 
-// 저지연 Apple Pencil 입력은 PencilKit이 담당한다. 다만 React Native 문서를
-// 원본으로 유지하기 위해 PKDrawing과 공통 페이지 좌표 JSON을 양방향 변환한다.
+/// PencilKit owns low-latency input while the cross-platform typed snapshot is
+/// the persistence boundary. Native emits only completed-stroke deltas.
 class NativeInkView: ExpoView, PKCanvasViewDelegate {
   private let canvasView = PKCanvasView()
-  private let onDrawingChange = EventDispatcher()
+  private let onInkChange = EventDispatcher()
+  private let onReady = EventDispatcher()
+  private let onCapabilities = EventDispatcher()
+  private let onError = EventDispatcher()
   private var strokeIds: [String] = []
-  private var lastAppliedJSON = ""
+  private var strokeFingerprints: [String] = []
+  private var currentRevision = 0
+  private var hasAppliedSnapshot = false
   private var isApplyingDrawing = false
   private var pageWidth: CGFloat = 900
   private var pageHeight: CGFloat = 1200
   private var selectedTool = "pen"
   private var selectedColor = UIColor.black
   private var selectedWidth: CGFloat = 4
-  private var lastClearTrigger = 0
   private var hasPendingDrawingChange = false
+  private var announcedReady = false
+  private var pendingSnapshotJSON: String?
+  private var lastLayoutSize: CGSize = .zero
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -31,19 +38,66 @@ class NativeInkView: ExpoView, PKCanvasViewDelegate {
 
   override func layoutSubviews() {
     super.layoutSubviews()
+    let nextSize = bounds.size
     canvasView.frame = bounds
+    if let pendingSnapshotJSON, nextSize.width > 0, nextSize.height > 0 {
+      self.pendingSnapshotJSON = nil
+      applySnapshotJSON(pendingSnapshotJSON)
+    } else if hasAppliedSnapshot,
+              lastLayoutSize.width > 0,
+              lastLayoutSize.height > 0,
+              nextSize.width > 0,
+              nextSize.height > 0,
+              nextSize != lastLayoutSize {
+      isApplyingDrawing = true
+      canvasView.drawing = canvasView.drawing.transformed(
+        using: CGAffineTransform(
+          scaleX: nextSize.width / lastLayoutSize.width,
+          y: nextSize.height / lastLayoutSize.height
+        )
+      )
+      strokeFingerprints = canvasView.drawing.strokes.map(fingerprint)
+      isApplyingDrawing = false
+    }
+    lastLayoutSize = nextSize
+    applyTool()
   }
 
-  func setDrawingPolicy(_ policy: String) {
-    canvasView.drawingPolicy = policy == "pencilOnly" ? .pencilOnly : .anyInput
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    guard window != nil, !announcedReady else { return }
+    announcedReady = true
+    onReady([:])
+    onCapabilities([
+      "pressure": true,
+      "tilt": true,
+      "palmRejection": true,
+      "motionPrediction": true,
+      "eraserMode": "wholeStroke",
+    ])
   }
 
-  func setPageSize(width: Double?, height: Double?) {
-    if let width, width > 0 { pageWidth = CGFloat(width) }
-    if let height, height > 0 { pageHeight = CGFloat(height) }
+  func setInputMode(_ mode: String) {
+    guard mode == "stylusOnly" || mode == "anyPointer" else {
+      onError([
+        "code": "unsupportedInputMode",
+        "message": "Unsupported ink input mode: \(mode)",
+        "recoverable": true,
+      ])
+      return
+    }
+    canvasView.drawingPolicy = mode == "stylusOnly" ? .pencilOnly : .anyInput
   }
 
   func setSelectedTool(_ tool: String) {
+    guard ["pen", "highlighter", "eraser", "navigate"].contains(tool) else {
+      onError([
+        "code": "unsupportedTool",
+        "message": "Unsupported ink tool: \(tool)",
+        "recoverable": true,
+      ])
+      return
+    }
     selectedTool = tool
     applyTool()
   }
@@ -58,35 +112,79 @@ class NativeInkView: ExpoView, PKCanvasViewDelegate {
     applyTool()
   }
 
-  func setStrokesJSON(_ json: String) {
-    guard json != lastAppliedJSON, let data = json.data(using: .utf8) else { return }
-    guard let strokes = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
-    isApplyingDrawing = true
-    strokeIds = strokes.compactMap { $0["id"] as? String }
-    canvasView.drawing = PKDrawing(strokes: strokes.compactMap(makeStroke))
-    lastAppliedJSON = json
-    isApplyingDrawing = false
+  func setSnapshotJSON(_ json: String) {
+    guard bounds.width > 0, bounds.height > 0 else {
+      // Expo may deliver props before the native view receives its first
+      // layout. Decoding with a fallback scale here would permanently restore
+      // the drawing at the wrong size.
+      pendingSnapshotJSON = json
+      return
+    }
+    pendingSnapshotJSON = nil
+    applySnapshotJSON(json)
   }
 
-  func handleClearTrigger(_ trigger: Int) {
-    guard trigger != lastClearTrigger else { return }
-    lastClearTrigger = trigger
-    strokeIds = []
-    canvasView.drawing = PKDrawing()
-    emitDrawingChange()
+  private func applySnapshotJSON(_ json: String) {
+    guard let data = json.data(using: .utf8),
+          let snapshot = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let revision = snapshot["revision"] as? Int,
+          let size = snapshot["pageSize"] as? [String: Any],
+          let strokes = snapshot["strokes"] as? [[String: Any]] else {
+      onError([
+        "code": "invalidSnapshot",
+        "message": "Invalid ink snapshot.",
+        "recoverable": false,
+      ])
+      return
+    }
+    let nextPageWidth = max(1, CGFloat(size["width"] as? Double ?? 900))
+    let nextPageHeight = max(1, CGFloat(size["height"] as? Double ?? 1200))
+    let nextXScale = bounds.width / nextPageWidth
+    let nextYScale = bounds.height / nextPageHeight
+    let nextViewScale = nextXScale
+    let decoded = strokes.compactMap { value -> (id: String, stroke: PKStroke)? in
+      guard let id = value["id"] as? String,
+            let stroke = NativeInkMath.makeStroke(
+              value,
+              xScale: nextXScale,
+              yScale: nextYScale,
+              viewScale: nextViewScale
+            ) else { return nil }
+      return (id, stroke)
+    }
+    guard decoded.count == strokes.count else {
+      onError([
+        "code": "invalidSnapshot",
+        "message": "Every ink stroke must have an ID and at least one valid point.",
+        "recoverable": false,
+      ])
+      return
+    }
+    let incomingIds = decoded.map(\.id)
+    if hasAppliedSnapshot && revision == currentRevision && incomingIds == strokeIds { return }
+
+    isApplyingDrawing = true
+    pageWidth = nextPageWidth
+    pageHeight = nextPageHeight
+    currentRevision = revision
+    strokeIds = incomingIds
+    let drawingStrokes = decoded.map(\.stroke)
+    canvasView.drawing = PKDrawing(strokes: drawingStrokes)
+    strokeFingerprints = drawingStrokes.map(fingerprint)
+    hasPendingDrawingChange = false
+    hasAppliedSnapshot = true
+    isApplyingDrawing = false
   }
 
   func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
     guard !isApplyingDrawing else { return }
-    // PencilKit은 한 획을 그리는 중에도 이 메서드를 반복 호출한다. 펜을 뗄 때까지
-    // 브리지 이벤트를 미뤄야 한 획이 하나의 실행 취소 단계가 된다.
     hasPendingDrawingChange = true
   }
 
   func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
     guard hasPendingDrawingChange else { return }
     hasPendingDrawingChange = false
-    emitDrawingChange()
+    emitIncrementalChange()
   }
 
   private func applyTool() {
@@ -107,96 +205,54 @@ class NativeInkView: ExpoView, PKCanvasViewDelegate {
     return bounds.width / pageWidth
   }
 
-  private func makeStroke(_ value: [String: Any]) -> PKStroke? {
-    guard let rawPoints = value["points"] as? [[String: Any]], !rawPoints.isEmpty else { return nil }
-    let color = UIColor(hex: value["color"] as? String ?? "#000000") ?? .black
-    let tool = value["tool"] as? String ?? "pen"
-    let inkType: PKInk.InkType = tool == "highlighter" ? .marker : .pen
-    let logicalWidth = value["width"] as? Double ?? 4
-    let opacity = value["opacity"] as? Double ?? (tool == "highlighter" ? 0.35 : 1)
-    let startTime = rawPoints.first?["timestamp"] as? Double ?? 0
-    let points = rawPoints.compactMap { raw -> PKStrokePoint? in
-      guard let x = raw["x"] as? Double, let y = raw["y"] as? Double else { return nil }
-      let timestamp = raw["timestamp"] as? Double ?? startTime
-      return PKStrokePoint(
-        location: CGPoint(x: CGFloat(x) * xScale, y: CGFloat(y) * yScale),
-        timeOffset: max(0, (timestamp - startTime) / 1000),
-        size: CGSize(width: logicalWidth * Double(viewScale), height: logicalWidth * Double(viewScale)),
-        opacity: CGFloat(opacity),
-        force: CGFloat(raw["pressure"] as? Double ?? 0.5),
-        azimuth: CGFloat(raw["azimuth"] as? Double ?? 0),
-        altitude: .pi / 2
-      )
-    }
-    guard !points.isEmpty else { return nil }
-    return PKStroke(ink: PKInk(inkType, color: color), path: PKStrokePath(controlPoints: points, creationDate: Date()))
-  }
-
   private var xScale: CGFloat { bounds.width > 0 ? bounds.width / pageWidth : 1 }
   private var yScale: CGFloat { bounds.height > 0 ? bounds.height / pageHeight : 1 }
 
-  private func emitDrawingChange() {
-    let strokes = canvasView.drawing.strokes.enumerated().map { index, stroke in
-      let id: String
-      if index < strokeIds.count {
-        id = strokeIds[index]
-      } else {
-        id = "stroke-\(UUID().uuidString)"
-        strokeIds.append(id)
-      }
-      return serialize(stroke, id: id)
-    }
-    let payload = ["strokes": strokes]
-    if let data = try? JSONSerialization.data(withJSONObject: strokes),
-       let json = String(data: data, encoding: .utf8) {
-      lastAppliedJSON = json
-    }
-    onDrawingChange(payload)
+  private func fingerprint(_ stroke: PKStroke) -> String {
+    NativeInkMath.fingerprint(stroke)
   }
 
-  private func serialize(_ stroke: PKStroke, id: String) -> [String: Any] {
-    let points = stroke.path.map { point -> [String: Any] in
-      [
-        "x": point.location.x / xScale,
-        "y": point.location.y / yScale,
-        "pressure": point.force,
-        "azimuth": point.azimuth,
-        "timestamp": point.timeOffset * 1000,
-      ]
+  private func emitIncrementalChange() {
+    var idsByFingerprint: [String: [String]] = [:]
+    for (index, fingerprint) in strokeFingerprints.enumerated() where index < strokeIds.count {
+      idsByFingerprint[fingerprint, default: []].append(strokeIds[index])
     }
-    let logicalWidth = stroke.path.isEmpty
-      ? selectedWidth
-      : stroke.path.reduce(CGFloat(0)) { $0 + $1.size.width } / CGFloat(stroke.path.count) / viewScale
-    let tool = stroke.ink.inkType == .marker ? "highlighter" : "pen"
-    return [
-      "id": id,
-      "points": points,
-      "tool": tool,
-      "color": stroke.ink.color.toHexString(),
-      "width": logicalWidth,
-      "opacity": tool == "highlighter" ? 0.35 : 1,
-    ]
-  }
-}
 
-private extension UIColor {
-  convenience init?(hex: String) {
-    let value = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-    guard value.count == 6, let number = Int(value, radix: 16) else { return nil }
-    self.init(
-      red: CGFloat((number >> 16) & 0xff) / 255,
-      green: CGFloat((number >> 8) & 0xff) / 255,
-      blue: CGFloat(number & 0xff) / 255,
-      alpha: 1
-    )
+    let previousIds = Set(strokeIds)
+    var nextIds: [String] = []
+    let currentStrokes = canvasView.drawing.strokes
+    let serialized = currentStrokes.map { stroke -> [String: Any] in
+      let key = fingerprint(stroke)
+      let id = idsByFingerprint[key]?.isEmpty == false
+        ? idsByFingerprint[key]!.removeFirst()
+        : "stroke-\(UUID().uuidString)"
+      nextIds.append(id)
+      return NativeInkMath.serialize(
+        stroke,
+        id: id,
+        xScale: xScale,
+        yScale: yScale,
+        viewScale: viewScale,
+        fallbackWidth: selectedWidth
+      )
+    }
+    let nextIdSet = Set(nextIds)
+    let added = serialized.filter { value in
+      guard let id = value["id"] as? String else { return false }
+      return !previousIds.contains(id)
+    }
+    let removed = Array(previousIds.subtracting(nextIdSet))
+
+    strokeIds = nextIds
+    strokeFingerprints = currentStrokes.map(fingerprint)
+    guard !added.isEmpty || !removed.isEmpty else { return }
+    onInkChange([
+      "baseRevision": currentRevision,
+      "changeId": UUID().uuidString,
+      "addedStrokes": added,
+      "removedStrokeIds": removed,
+    ])
+    currentRevision += 1
   }
 
-  func toHexString() -> String {
-    var red: CGFloat = 0
-    var green: CGFloat = 0
-    var blue: CGFloat = 0
-    var alpha: CGFloat = 0
-    getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-    return String(format: "#%02X%02X%02X", Int(red * 255), Int(green * 255), Int(blue * 255))
-  }
 }

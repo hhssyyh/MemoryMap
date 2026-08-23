@@ -1,33 +1,68 @@
 import type { StyleProp, ViewStyle } from 'react-native';
 
-export type NativeInkPointPayload = {
+export type InkInputMode = 'stylusOnly' | 'anyPointer';
+
+export type InkPoint = {
   x: number;
   y: number;
-  pressure: number;
+  pressure?: number;
   tiltX?: number;
   tiltY?: number;
   azimuth?: number;
   timestamp: number;
 };
 
-export type NativeInkStrokePayload = {
+export type InkStroke = {
   id: string;
-  points: NativeInkPointPayload[];
+  points: InkPoint[];
   tool: 'pen' | 'highlighter';
   color: string;
   width: number;
   opacity: number;
 };
 
+export type InkSnapshot = {
+  schemaVersion: number;
+  revision: number;
+  pageSize: { width: number; height: number };
+  strokes: InkStroke[];
+};
+
+export type InkChange = {
+  baseRevision: number;
+  changeId: string;
+  addedStrokes: InkStroke[];
+  removedStrokeIds: string[];
+};
+
+export type InkCapabilities = {
+  pressure: boolean;
+  tilt: boolean;
+  palmRejection: boolean;
+  motionPrediction: boolean;
+  eraserMode: 'wholeStroke';
+};
+
+export type InkErrorCode =
+  | 'invalidSnapshot'
+  | 'revisionMismatch'
+  | 'unsupportedInputMode'
+  | 'unsupportedTool'
+  | 'nativeFailure';
+
+export type InkError = { code: InkErrorCode; message: string; recoverable: boolean };
+
+export type NativeInkTool = 'pen' | 'highlighter' | 'eraser' | 'navigate';
+
 export type NativeInkViewProps = {
-  drawingPolicy?: 'anyInput' | 'pencilOnly';
-  strokesJson?: string;
-  selectedTool?: 'pen' | 'highlighter' | 'eraser' | 'navigate';
+  inputMode: InkInputMode;
+  snapshot: InkSnapshot;
+  selectedTool?: NativeInkTool;
   selectedColor?: string;
   selectedWidth?: number;
-  pageWidth?: number;
-  pageHeight?: number;
-  clearTrigger?: number;
-  onDrawingChange?: (event: { nativeEvent: { strokes: NativeInkStrokePayload[] } }) => void;
+  onChange?: (change: InkChange) => void;
+  onReady?: () => void;
+  onCapabilities?: (capabilities: InkCapabilities) => void;
+  onError?: (error: InkError) => void;
   style?: StyleProp<ViewStyle>;
 };

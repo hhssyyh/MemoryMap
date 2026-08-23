@@ -5,14 +5,8 @@ public class NativeInkViewModule: Module {
     Name("NativeInkView")
 
     View(NativeInkView.self) {
-      Prop("drawingPolicy") { (view: NativeInkView, policy: String) in
-        view.setDrawingPolicy(policy)
-      }
-      Prop("pageWidth") { (view: NativeInkView, width: Double?) in
-        view.setPageSize(width: width, height: nil)
-      }
-      Prop("pageHeight") { (view: NativeInkView, height: Double?) in
-        view.setPageSize(width: nil, height: height)
+      Prop("inputMode") { (view: NativeInkView, mode: String) in
+        view.setInputMode(mode)
       }
       Prop("selectedTool") { (view: NativeInkView, tool: String) in
         view.setSelectedTool(tool)
@@ -23,13 +17,10 @@ public class NativeInkViewModule: Module {
       Prop("selectedWidth") { (view: NativeInkView, width: Double) in
         view.setSelectedWidth(width)
       }
-      Prop("strokesJson") { (view: NativeInkView, json: String) in
-        view.setStrokesJSON(json)
+      Prop("snapshotJson") { (view: NativeInkView, json: String) in
+        view.setSnapshotJSON(json)
       }
-      Prop("clearTrigger") { (view: NativeInkView, trigger: Int) in
-        view.handleClearTrigger(trigger)
-      }
-      Events("onDrawingChange")
+      Events("onInkChange", "onReady", "onCapabilities", "onError")
     }
   }
 }
