@@ -1,33 +1,53 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
-import { StyleSheet, Text } from 'react-native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import {
+  DefaultTheme,
+  NavigationContainer,
+  type NavigatorScreenParams,
+} from '@react-navigation/native';
+import { StyleSheet } from 'react-native';
 
-import { colors } from '../constants/theme';
+import type { ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 import { DiaryScreen } from '../screens/DiaryScreen';
+import { DiaryDetailScreen } from '../screens/DiaryDetailScreen';
+import { Home2Screen } from '../screens/Home2Screen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { MapScreen } from '../screens/MapScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { CreateDiaryScreen } from '../screens/CreateDiaryScreen';
+import { EditDiaryScreen } from '../screens/EditDiaryScreen';
+import { SearchDiaryScreen } from '../screens/SearchDiaryScreen';
+import { HandwritingEditorScreen } from '../screens/HandwritingEditorScreen';
+import type { DiaryEntry } from '../types/diary';
+import { ThemedText as Text } from '../components/ThemedText';
+
+export type RootStackParamList = {
+  MainTabs: NavigatorScreenParams<RootTabParamList> | undefined;
+  DiaryDetail: {
+    diary: DiaryEntry;
+    location: string;
+  };
+  CreateDiary: undefined;
+  EditDiary: { diaryId: string };
+  SearchDiary: { tag?: string } | undefined;
+  HandwritingEditor: { diary: DiaryEntry };
+};
 
 export type RootTabParamList = {
+  Home: undefined;
+  Home2: undefined;
   Map: undefined;
   Diary: undefined;
   Settings: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
-
-const navigationTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: colors.background,
-    border: colors.border,
-    card: colors.surface,
-    primary: colors.primary,
-    text: colors.text,
-  },
-};
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const tabIcons: Record<keyof RootTabParamList, string> = {
+  Home: '⌂',
+  Home2: '◇',
   Map: '⌖',
   Diary: '▤',
   Settings: '⚙',
@@ -40,6 +60,7 @@ type TabIconProps = {
 };
 
 function TabIcon({ color, focused, routeName }: TabIconProps) {
+  const styles = createStyles(useAppTheme().colors);
   return (
     <Text
       style={[
@@ -54,10 +75,56 @@ function TabIcon({ color, focused, routeName }: TabIconProps) {
 }
 
 export function RootNavigator() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+  const navigationTheme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: colors.background,
+      border: colors.border,
+      card: colors.surface,
+      primary: colors.primary,
+      text: colors.text,
+    },
+  };
+
   return (
     <NavigationContainer theme={navigationTheme}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen component={MainTabs} name="MainTabs" />
+        <Stack.Screen
+          component={CreateDiaryScreen}
+          name="CreateDiary"
+          options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen component={EditDiaryScreen} name="EditDiary" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen component={SearchDiaryScreen} name="SearchDiary" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen
+          component={HandwritingEditorScreen}
+          name="HandwritingEditor"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          component={DiaryDetailScreen}
+          name="DiaryDetail"
+          options={{
+            animation: 'slide_from_right',
+            presentation: 'card',
+          }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+function MainTabs() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
+  return (
       <Tab.Navigator
-        initialRouteName="Map"
+        initialRouteName="Home"
         screenOptions={({ route }) => ({
           headerShown: false,
           sceneStyle: styles.scene,
@@ -73,6 +140,16 @@ export function RootNavigator() {
       >
         <Tab.Screen
           component={HomeScreen}
+          name="Home"
+          options={{ tabBarLabel: '홈', title: '홈' }}
+        />
+        <Tab.Screen
+          component={Home2Screen}
+          name="Home2"
+          options={{ tabBarLabel: '홈2', title: '홈2' }}
+        />
+        <Tab.Screen
+          component={MapScreen}
           name="Map"
           options={{ tabBarLabel: '지도', title: '지도' }}
         />
@@ -87,18 +164,16 @@ export function RootNavigator() {
           options={{ tabBarLabel: '설정', title: '설정' }}
         />
       </Tab.Navigator>
-    </NavigationContainer>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   scene: {
     backgroundColor: colors.background,
   },
   tabBar: {
     backgroundColor: colors.surface,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
+    borderTopWidth: 0,
     elevation: 10,
     shadowColor: colors.text,
     shadowOffset: { width: 0, height: -3 },

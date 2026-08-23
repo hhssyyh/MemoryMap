@@ -1,7 +1,9 @@
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { StatusBar, StyleSheet, View } from 'react-native';
+import { ThemedText as Text } from './ThemedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, spacing } from '../constants/theme';
+import { spacing, type ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 
 type ComingSoonScreenProps = {
   description: string;
@@ -16,6 +18,8 @@ export function ComingSoonScreen({
   icon,
   title,
 }: ComingSoonScreenProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const insets = useSafeAreaInsets();
 
   return (
@@ -36,7 +40,7 @@ export function ComingSoonScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
@@ -86,12 +90,15 @@ const styles = StyleSheet.create({
   },
   badge: {
     backgroundColor: colors.surface,
-    borderColor: colors.border,
     borderRadius: 14,
-    borderWidth: 1,
+    elevation: 2,
     marginTop: spacing.lg,
     paddingHorizontal: 14,
     paddingVertical: 7,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
   },
   badgeText: {
     color: colors.textMuted,

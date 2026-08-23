@@ -1,18 +1,20 @@
-import { Modal, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StatusBar, StyleSheet, View } from 'react-native';
+import { ThemedText as Text } from './ThemedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors } from '../constants/theme';
+import type { ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 import type { DiaryPoint } from '../types/diary';
 import type { CurrentCoordinate } from '../hooks/useCurrentLocation';
 import { MemoryMap } from './MemoryMap';
 
 type FullscreenMapModalProps = {
   points: DiaryPoint[];
-  selectedPoint: DiaryPoint;
+  highlightedPointId?: string;
   visible: boolean;
   onClose: () => void;
   onOpenDiaries: (point: DiaryPoint) => void;
-  onSelectPoint: (point: DiaryPoint) => void;
+  onSelectPoint?: (point: DiaryPoint) => void;
   currentLocation: CurrentCoordinate | null;
   isLocating: boolean;
   onRequestLocation: () => Promise<void>;
@@ -20,7 +22,7 @@ type FullscreenMapModalProps = {
 
 export function FullscreenMapModal({
   points,
-  selectedPoint,
+  highlightedPointId,
   visible,
   onClose,
   onOpenDiaries,
@@ -29,6 +31,8 @@ export function FullscreenMapModal({
   isLocating,
   onRequestLocation,
 }: FullscreenMapModalProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const insets = useSafeAreaInsets();
 
   return (
@@ -44,12 +48,12 @@ export function FullscreenMapModal({
         <MemoryMap
           currentLocation={currentLocation}
           expanded
+          highlightedPointId={highlightedPointId}
           onOpenDiaries={onOpenDiaries}
           onSelectPoint={onSelectPoint}
           isLocating={isLocating}
           onRequestLocation={onRequestLocation}
           points={points}
-          selectedPoint={selectedPoint}
           topInset={insets.top}
         />
         <Pressable
@@ -69,24 +73,17 @@ export function FullscreenMapModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
   },
   closeButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    elevation: 5,
     height: 40,
     justifyContent: 'center',
     position: 'absolute',
     right: 14,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
-    shadowRadius: 5,
     width: 40,
   },
   closeButtonPressed: {
@@ -94,9 +91,12 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.96 }],
   },
   closeIcon: {
-    color: colors.text,
+    color: '#FFFFFF',
     fontSize: 28,
     fontWeight: '400',
     lineHeight: 30,
+    textShadowColor: 'rgba(35, 22, 27, 0.72)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 5,
   },
 });

@@ -1,0 +1,9 @@
+{
+  "name": "native-ink-view",
+  "version": "0.1.0-private",
+  "description": "Typed cross-platform ink view contract backed by PencilKit and Jetpack Ink",
+  "main": "src/index.ts",
+  "license": "MIT",
+  "author": "MemoryMap",
+  "homepage": "https://github.com/team00010/memory_map"
+}

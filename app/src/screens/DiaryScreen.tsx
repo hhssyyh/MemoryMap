@@ -1,18 +1,23 @@
-import { FlatList, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StatusBar, StyleSheet, View } from 'react-native';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DiaryListItem } from '../components/DiaryListItem';
-import { sampleDiaryPoints } from '../constants/sampleDiaryPoints';
-import { colors, spacing } from '../constants/theme';
-
-const diaryItems = sampleDiaryPoints
-  .flatMap((point) =>
-    point.diaries.map((diary) => ({ diary, location: point.location })),
-  )
-  .sort((a, b) => b.diary.date.localeCompare(a.diary.date));
+import { spacing, type ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
+import { useDiaries } from '../context/DiaryContext';
+import type { RootStackParamList } from '../navigation/RootNavigator';
+import { ThemedText as Text } from '../components/ThemedText';
 
 export function DiaryScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const { points } = useDiaries();
+  const diaryItems = points
+    .flatMap((point) => point.diaries.map((diary) => ({ diary, location: point.location })))
+    .sort((a, b) => b.diary.date.localeCompare(a.diary.date));
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -25,22 +30,30 @@ export function DiaryScreen() {
       <FlatList
         contentContainerStyle={styles.listContent}
         data={diaryItems}
-        ItemSeparatorComponent={ItemSeparator}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         keyExtractor={({ diary }) => diary.id}
         renderItem={({ item }) => (
-          <DiaryListItem diary={item.diary} location={item.location} />
+          <DiaryListItem
+            diary={item.diary}
+            location={item.location}
+            onPress={() =>
+              navigation.navigate('DiaryDetail', {
+                diary: item.diary,
+                location: item.location,
+              })
+            }
+          />
         )}
         showsVerticalScrollIndicator={false}
       />
+      <Pressable accessibilityLabel="새 기록 작성" onPress={() => navigation.navigate('CreateDiary')} style={styles.addButton}>
+        <Text style={styles.addButtonText}>＋</Text>
+      </Pressable>
     </View>
   );
 }
 
-function ItemSeparator() {
-  return <View style={styles.separator} />;
-}
-
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
@@ -75,4 +88,6 @@ const styles = StyleSheet.create({
   separator: {
     height: spacing.sm,
   },
+  addButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 28, bottom: spacing.lg, elevation: 6, height: 56, justifyContent: 'center', position: 'absolute', right: spacing.lg, width: 56 },
+  addButtonText: { color: colors.surface, fontSize: 32, lineHeight: 34 },
 });

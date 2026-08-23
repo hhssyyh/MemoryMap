@@ -44,6 +44,13 @@ target 'MemoryMap' do
   use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
   use_frameworks! :linkage => ENV['USE_FRAMEWORKS'].to_sym if ENV['USE_FRAMEWORKS']
 
+# @generated begin pre_installer - expo prebuild (DO NOT MODIFY) sync-c8812095000d6054b846ce74840f0ffb540c2757
+  pre_install do |installer|
+# @generated begin @rnmapbox/maps-pre_installer - expo prebuild (DO NOT MODIFY) sync-ea4905840bf9fcea0acc62e92aa2e784f9d760f8
+    $RNMapboxMaps.pre_install(installer)
+# @generated end @rnmapbox/maps-pre_installer
+  end
+# @generated end pre_installer
   use_react_native!(
     :path => config[:reactNativePath],
     :hermes_enabled => podfile_properties['expo.jsEngine'] == nil || podfile_properties['expo.jsEngine'] == 'hermes',
@@ -53,11 +60,27 @@ target 'MemoryMap' do
   )
 
   post_install do |installer|
+# @generated begin @rnmapbox/maps-post_installer - expo prebuild (DO NOT MODIFY) sync-c4e8f90e96f6b6c6ea9241dd7b52ab5f57f7bf36
+    $RNMapboxMaps.post_install(installer)
+# @generated end @rnmapbox/maps-post_installer
     react_native_post_install(
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+    # @generated begin memory-map-fmt-xcode26-fix
+    # Temporary compatibility workaround:
+    # React Native 0.81 bundles fmt 11.0.2, which does not compile in C++20
+    # mode with Apple Clang 21 / Xcode 26.4+. Keep every other pod on C++20.
+    # Remove after upgrading to a React Native version that uses fmt 12+.
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'fmt'
+
+      target.build_configurations.each do |build_configuration|
+        build_configuration.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      end
+    end
+    # @generated end memory-map-fmt-xcode26-fix
   end
 end

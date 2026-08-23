@@ -24,6 +24,7 @@ Diary Map은 사용자가 방문한 장소에서 촬영한 사진을 기반으�
 - GPS 기반 위치 저장
 - 지도 기반 다이어리 관리
 - 다이어리 작성 / 수정 / 삭제
+- 태블릿용 다중 페이지 필기, 사진 및 스티커 편집
 
 ---
 
@@ -68,21 +69,22 @@ docs/       # Project Documentation
 | FEATURES.md         | 기능 정의             |
 | TECH_STACK.md       | 기술 스택             |
 | ARCHITECTURE.md     | 시스템 아키텍처       |
+| HANDWRITING_EDITOR.md | 필기 편집기 제품·기술 설계 |
 | TODO.md             | 개발 진행 현황        |
 
 ---
 
 ## 🚀 Status
 
-현재 프로젝트 초기 설계 단계입니다.
-
-MVP 개발을 진행 중입니다.
+현재 프로덕션 배포 전 PoC와 MVP 개발을 진행 중입니다. 모바일 앱의 로컬
+SQLite 저장 구조와 iPad 우선 필기 편집기를 구현하고 있으며, Android
+Jetpack Ink 연동과 서버 동기화는 후속 단계입니다.
 
 ---
 
 ## 실행 방법
 
-Node.js가 설치된 환경에서 아래 명령어를 실행합니다.
+프로젝트 루트의 `.nvmrc`에 지정된 Node.js 20.16.0 환경에서 아래 명령어를 실행합니다.
 
 ```bash
 cd app
