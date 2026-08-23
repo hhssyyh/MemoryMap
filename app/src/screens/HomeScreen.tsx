@@ -16,6 +16,7 @@ import { spacing, type ThemeColors } from "../constants/theme";
 import { useDiaries } from "../context/DiaryContext";
 import { useAppTheme } from "../context/ThemeContext";
 import { useCurrentLocation } from "../hooks/useCurrentLocation";
+import { usePhotoMapMarkers } from "../hooks/usePhotoMapMarkers";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import type { DiaryPoint } from "../types/diary";
 import { ThemedText as Text } from "../components/ThemedText";
@@ -39,6 +40,7 @@ export function HomeScreen() {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const { points } = useDiaries();
+  const photoMapMarkers = usePhotoMapMarkers(points);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const currentLocation = useCurrentLocation();
@@ -169,6 +171,8 @@ export function HomeScreen() {
           setSelectedPointId(point.id);
         }}
         onRequestLocation={currentLocation.requestLocation}
+        photoMarkers={photoMapMarkers.markers}
+        photoSyncStatus={photoMapMarkers.syncStatus}
         points={points}
         visible={isMapExpanded}
       />

@@ -8,13 +8,16 @@ import { BookmarkIcon } from './BookmarkIcon';
 import { ThemedText as Text } from './ThemedText';
 
 type DiaryListItemProps = {
+  delayLongPress?: number;
   diary: DiaryEntry;
   location?: string;
+  onLongPress?: () => void;
   onPress?: () => void;
+  onPressOut?: () => void;
   variant?: 'default' | 'homeSheet';
 };
 
-export function DiaryListItem({ diary, location, onPress, variant = 'default' }: DiaryListItemProps) {
+export function DiaryListItem({ delayLongPress, diary, location, onLongPress, onPress, onPressOut, variant = 'default' }: DiaryListItemProps) {
   const { colors } = useAppTheme();
   const { toggleDiarySaved } = useDiaries();
   const styles = createStyles(colors);
@@ -43,8 +46,11 @@ export function DiaryListItem({ diary, location, onPress, variant = 'default' }:
       <Pressable
         accessibilityLabel={`${diary.title} 상세 보기`}
         accessibilityRole={onPress ? 'button' : undefined}
+        delayLongPress={delayLongPress}
         disabled={!onPress}
+        onLongPress={onLongPress}
         onPress={onPress}
+        onPressOut={onPressOut}
         style={({ pressed }) => [styles.homeCard, pressed && styles.pressed]}
       >
         <View style={styles.homePhotoContainer}>
@@ -74,8 +80,11 @@ export function DiaryListItem({ diary, location, onPress, variant = 'default' }:
     <Pressable
       accessibilityLabel={`${diary.title} 상세 보기`}
       accessibilityRole={onPress ? 'button' : undefined}
+      delayLongPress={delayLongPress}
       disabled={!onPress}
+      onLongPress={onLongPress}
       onPress={onPress}
+      onPressOut={onPressOut}
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
     >
       <View style={styles.photoContainer}>

@@ -6,15 +6,28 @@ import type { ThemeColors } from "../constants/theme";
 import { useAppTheme } from "../context/ThemeContext";
 import type { CurrentCoordinate } from "../hooks/useCurrentLocation";
 import type { DiaryPoint } from "../types/diary";
+import type { MapSearchPlace } from "../types/mapSearch";
+import type {
+  DiaryPhotoMapMarker,
+  LibraryPhotoMapMarker,
+  PhotoMapMarker,
+} from "../types/photoLocation";
+import { buildDiaryPhotoMapMarkers } from "../utils/photoMapMarkers";
 import { ThemedText as Text } from "./ThemedText";
 
 type MemoryMapProps = {
   points: DiaryPoint[];
+  photoMarkers?: PhotoMapMarker[];
+  photoSyncStatus?: "idle" | "permission_required" | "syncing" | "ready" | "error";
   compact?: boolean;
   focusCoordinate?: CurrentCoordinate;
   highlightedPointId?: string;
+  minimumHeight?: number;
+  onMapInteraction?: () => void;
   onSelectPoint?: (point: DiaryPoint) => void;
   onOpenDiaries?: (point: DiaryPoint) => void;
+  routeMode?: "daily" | "sequence";
+  searchTarget?: MapSearchPlace | null;
   expanded?: boolean;
   onExpand?: () => void;
   topInset?: number;
@@ -45,9 +58,15 @@ function resolveMapStyleURL(themeName: string): string {
 }
 
 type MarkerProperties = {
-  location: string;
-  pointId: string;
+  kind: PhotoMapMarker["kind"];
+  label: string;
+  markerId: string;
+  pointId?: string;
   selected: boolean;
+};
+
+type SearchTargetProperties = {
+  label: string;
 };
 
 type ShapePressEvent = {
@@ -55,24 +74,60 @@ type ShapePressEvent = {
 };
 
 function createMarkerCollection(
-  points: DiaryPoint[],
-  selectedPointId: string,
+  markers: PhotoMapMarker[],
+  selectedMarkerId: string,
 ): GeoJSON.FeatureCollection<GeoJSON.Point, MarkerProperties> {
   return {
     type: "FeatureCollection",
-    features: points.map((point) => ({
+    features: markers.map((marker) => ({
       type: "Feature",
-      id: point.id,
+      id: marker.id,
       geometry: {
         type: "Point",
-        coordinates: [point.coordinate.longitude, point.coordinate.latitude],
+        coordinates: [marker.coordinate.longitude, marker.coordinate.latitude],
       },
       properties: {
-        location: point.location,
-        pointId: point.id,
-        selected: point.id === selectedPointId,
+        kind: marker.kind,
+        label:
+          marker.kind === "diary"
+            ? marker.location
+            : marker.kind === "library_photo"
+              ? `${marker.photoCount} photos`
+              : `${marker.totalCount} items`,
+        markerId: marker.id,
+        pointId:
+          marker.kind === "diary"
+            ? marker.id.replace(/^diary-/, "")
+            : undefined,
+        selected: marker.id === selectedMarkerId,
       },
     })),
+  };
+}
+
+function createSearchTargetCollection(
+  searchTarget?: MapSearchPlace | null,
+): GeoJSON.FeatureCollection<GeoJSON.Point, SearchTargetProperties> {
+  return {
+    type: "FeatureCollection",
+    features: searchTarget
+      ? [
+          {
+            type: "Feature",
+            id: searchTarget.id,
+            geometry: {
+              type: "Point",
+              coordinates: [
+                searchTarget.coordinate.longitude,
+                searchTarget.coordinate.latitude,
+              ],
+            },
+            properties: {
+              label: searchTarget.name,
+            },
+          },
+        ]
+      : [],
   };
 }
 
@@ -113,17 +168,71 @@ function createDailyRouteCollection(
   };
 }
 
+function createSequenceRouteCollection(
+  points: DiaryPoint[],
+): GeoJSON.FeatureCollection<GeoJSON.LineString, { date: string }> {
+  const coordinates = points
+    .flatMap((point) =>
+      point.diaries.map((diary) => ({
+        id: diary.id,
+        routeOrder: diary.routeOrder,
+        visitedAt: diary.visitedAt ?? diary.date,
+        coordinate: [
+          diary.longitude ?? point.coordinate.longitude,
+          diary.latitude ?? point.coordinate.latitude,
+        ] as [number, number],
+      })),
+    )
+    .sort(
+      (a, b) =>
+        (a.routeOrder ?? Number.MAX_SAFE_INTEGER) -
+          (b.routeOrder ?? Number.MAX_SAFE_INTEGER) ||
+        (a.visitedAt ?? "").localeCompare(b.visitedAt ?? "") ||
+        a.id.localeCompare(b.id),
+    )
+    .map((diary) => diary.coordinate);
+
+  return {
+    type: "FeatureCollection",
+    features:
+      coordinates.length >= 2
+        ? [
+            {
+              type: "Feature",
+              geometry: { type: "LineString", coordinates },
+              properties: { date: "collection" },
+            },
+          ]
+        : [],
+  };
+}
+
+function toDiaryPoint(marker: DiaryPhotoMapMarker): DiaryPoint {
+  return {
+    id: marker.id.replace(/^diary-/, ""),
+    location: marker.location,
+    coordinate: marker.coordinate,
+    diaries: marker.diaries,
+  };
+}
+
 if (accessToken) {
   void Mapbox.setAccessToken(accessToken);
 }
 
 export function MemoryMap({
   points,
+  photoMarkers,
+  photoSyncStatus = "idle",
   compact = false,
   focusCoordinate,
   highlightedPointId,
+  minimumHeight = 390,
+  onMapInteraction,
   onSelectPoint,
   onOpenDiaries,
+  routeMode = "daily",
+  searchTarget,
   expanded = false,
   onExpand,
   topInset = 0,
@@ -141,13 +250,28 @@ export function MemoryMap({
   const [markerScale, setMarkerScale] = useState(1);
   const [visualHighlightedPointId, setVisualHighlightedPointId] =
     useState<string>();
-  const markerCollection = useMemo(
-    () => createMarkerCollection(points, visualHighlightedPointId ?? ""),
-    [points, visualHighlightedPointId],
+  const [selectedLibraryMarker, setSelectedLibraryMarker] =
+    useState<LibraryPhotoMapMarker>();
+  const displayMarkers = useMemo<PhotoMapMarker[]>(
+    () => photoMarkers ?? buildDiaryPhotoMapMarkers(points),
+    [photoMarkers, points],
   );
-  const dailyRouteCollection = useMemo(
-    () => createDailyRouteCollection(points),
-    [points],
+  const selectedMarkerId = selectedLibraryMarker?.id
+    ?? (visualHighlightedPointId ? `diary-${visualHighlightedPointId}` : "");
+  const markerCollection = useMemo(
+    () => createMarkerCollection(displayMarkers, selectedMarkerId),
+    [displayMarkers, selectedMarkerId],
+  );
+  const routeCollection = useMemo(
+    () =>
+      routeMode === "sequence"
+        ? createSequenceRouteCollection(points)
+        : createDailyRouteCollection(points),
+    [points, routeMode],
+  );
+  const searchTargetCollection = useMemo(
+    () => createSearchTargetCollection(searchTarget),
+    [searchTarget],
   );
 
   useEffect(() => {
@@ -200,13 +324,34 @@ export function MemoryMap({
     });
   }, [focusCoordinate]);
 
+  useEffect(() => {
+    if (!searchTarget) return;
+
+    cameraRef.current?.setCamera({
+      animationDuration: 650,
+      animationMode: "flyTo",
+      centerCoordinate: [
+        searchTarget.coordinate.longitude,
+        searchTarget.coordinate.latitude,
+      ],
+      zoomLevel: 14.5,
+      padding: {
+        paddingBottom: expanded ? 180 : 130,
+        paddingLeft: 36,
+        paddingRight: 36,
+        paddingTop: 120 + topInset,
+      },
+    });
+  }, [expanded, searchTarget, topInset]);
+
   const fitAllPoints = () => {
-    if (points.length === 0) {
+    const coordinates = displayMarkers.map((marker) => marker.coordinate);
+    if (coordinates.length === 0) {
       return;
     }
 
-    const longitudes = points.map((point) => point.coordinate.longitude);
-    const latitudes = points.map((point) => point.coordinate.latitude);
+    const longitudes = coordinates.map((coordinate) => coordinate.longitude);
+    const latitudes = coordinates.map((coordinate) => coordinate.latitude);
 
     cameraRef.current?.fitBounds(
       [Math.max(...longitudes), Math.max(...latitudes)],
@@ -225,6 +370,7 @@ export function MemoryMap({
   }, [highlightedPointId]);
 
   const openPoint = (point: DiaryPoint) => {
+    setSelectedLibraryMarker(undefined);
     cameraRef.current?.setCamera({
       animationDuration: 550,
       animationMode: "easeTo",
@@ -244,7 +390,29 @@ export function MemoryMap({
     onOpenDiaries?.(point);
   };
 
+  const openLibraryMarker = (marker: LibraryPhotoMapMarker) => {
+    setSelectedLibraryMarker(marker);
+    setVisualHighlightedPointId(undefined);
+    cameraRef.current?.setCamera({
+      animationDuration: 550,
+      animationMode: "easeTo",
+      centerCoordinate: [
+        marker.coordinate.longitude,
+        marker.coordinate.latitude,
+      ],
+      zoomLevel: 14,
+      padding: {
+        paddingBottom: expanded ? 240 : 150,
+        paddingLeft: 36,
+        paddingRight: 36,
+        paddingTop: 72,
+      },
+    });
+  };
+
   const handleMarkerPress = async (event: ShapePressEvent) => {
+    onMapInteraction?.();
+
     const feature = event.features[0];
 
     if (!feature) {
@@ -266,14 +434,37 @@ export function MemoryMap({
       return;
     }
 
-    const point = points.find(
-      (candidate) => candidate.id === feature.properties?.pointId,
+    const marker = displayMarkers.find(
+      (candidate) => candidate.id === feature.properties?.markerId,
     );
 
-    if (point) {
-      openPoint(point);
+    if (marker?.kind === "diary") {
+      openPoint(toDiaryPoint(marker));
+    } else if (marker?.kind === "library_photo") {
+      openLibraryMarker(marker);
     }
   };
+
+  const diaryMarkers = displayMarkers.filter(
+    (marker): marker is DiaryPhotoMapMarker => marker.kind === "diary",
+  );
+  const libraryMarkers = displayMarkers.filter(
+    (marker): marker is LibraryPhotoMapMarker => marker.kind === "library_photo",
+  );
+  const libraryPhotoCount = libraryMarkers.reduce(
+    (count, marker) => count + marker.photoCount,
+    0,
+  );
+  const photoStatusText =
+    photoSyncStatus === "syncing"
+      ? "사진 동기화 중"
+      : photoSyncStatus === "permission_required"
+        ? "사진 권한 필요"
+        : photoSyncStatus === "error"
+          ? "사진 동기화 오류"
+          : libraryPhotoCount > 0
+            ? `위치 사진 ${libraryPhotoCount}개`
+            : "위치 사진 없음";
 
   if (!accessToken) {
     return (
@@ -287,10 +478,17 @@ export function MemoryMap({
   }
 
   return (
-    <View style={[styles.container, expanded && styles.containerExpanded]}>
+    <View
+      style={[
+        styles.container,
+        { minHeight: expanded ? 0 : minimumHeight },
+        expanded && styles.containerExpanded,
+      ]}
+    >
       <Mapbox.MapView
         compassEnabled={false}
         logoEnabled
+        onPress={onMapInteraction}
         pitchEnabled={!compact && false}
         rotateEnabled={false}
         scaleBarEnabled={false}
@@ -304,9 +502,9 @@ export function MemoryMap({
           ref={cameraRef}
         />
 
-        <Mapbox.ShapeSource id="daily-routes" shape={dailyRouteCollection}>
+        <Mapbox.ShapeSource id="memory-routes" shape={routeCollection}>
           <Mapbox.LineLayer
-            id="daily-route-lines"
+            id="memory-route-lines"
             style={{
               lineCap: "round",
               lineColor: "#D9A5AD",
@@ -377,7 +575,7 @@ export function MemoryMap({
             id="memory-marker-selected-label"
             style={{
               textColor: "#51485D",
-              textField: ["get", "location"],
+              textField: ["get", "label"],
               textHaloColor: "#FFF8EE",
               textHaloWidth: 2,
               textOffset: [0, 1.2],
@@ -386,18 +584,19 @@ export function MemoryMap({
           />
         </Mapbox.ShapeSource>
 
-        {points.map((point) => {
-          const diary = point.diaries[0];
-          const photoUri = diary?.photoUris?.[0] ?? diary?.photoUri;
+        {diaryMarkers.map((marker) => {
+          const diary = marker.diaries[0];
+          const photoUri = marker.coverPhotoUri ?? diary?.photoUris?.[0] ?? diary?.photoUri;
+          const point = toDiaryPoint(marker);
           const selected = point.id === visualHighlightedPointId;
 
           return (
             <Mapbox.MarkerView
               allowOverlap
               anchor={{ x: 0.5, y: 1 }}
-              coordinate={[point.coordinate.longitude, point.coordinate.latitude]}
-              id={`memory-marker-view-${point.id}`}
-              key={point.id}
+              coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
+              id={`memory-marker-view-${marker.id}`}
+              key={marker.id}
             >
               <Pressable
                 accessibilityLabel={`${point.location} 기록 열기`}
@@ -428,6 +627,45 @@ export function MemoryMap({
           );
         })}
 
+        {libraryMarkers.map((marker) => {
+          const selected = selectedLibraryMarker?.id === marker.id;
+
+          return (
+            <Mapbox.MarkerView
+              allowOverlap
+              anchor={{ x: 0.5, y: 1 }}
+              coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
+              id={`library-photo-marker-view-${marker.id}`}
+              key={marker.id}
+            >
+              <Pressable
+                accessibilityLabel={`위치 사진 ${marker.photoCount}개 보기`}
+                accessibilityRole="button"
+                onPress={() => openLibraryMarker(marker)}
+                style={[
+                  styles.libraryMarkerCanvas,
+                  selected && styles.libraryMarkerSelected,
+                ]}
+              >
+                <View style={styles.libraryPhotoFrame}>
+                  {marker.previewPhotoUri ? (
+                    <RNImage
+                      resizeMode="cover"
+                      source={{ uri: marker.previewPhotoUri }}
+                      style={styles.photo}
+                    />
+                  ) : (
+                    <Text style={styles.libraryPhotoIcon}>▧</Text>
+                  )}
+                </View>
+                <View style={styles.libraryCountBadge}>
+                  <Text style={styles.libraryCountText}>{marker.photoCount}</Text>
+                </View>
+              </Pressable>
+            </Mapbox.MarkerView>
+          );
+        })}
+
         {currentLocation ? (
           <Mapbox.PointAnnotation
             coordinate={[currentLocation.longitude, currentLocation.latitude]}
@@ -436,6 +674,41 @@ export function MemoryMap({
             <View style={styles.currentLocationMarker} />
           </Mapbox.PointAnnotation>
         ) : null}
+
+        <Mapbox.ShapeSource
+          id="map-search-target"
+          shape={searchTargetCollection}
+        >
+          <Mapbox.CircleLayer
+            id="map-search-target-halo"
+            style={{
+              circleColor: "#FFFFFF",
+              circleOpacity: 0.88,
+              circleRadius: 16,
+              circleStrokeColor: colors.primary,
+              circleStrokeWidth: 3,
+            }}
+          />
+          <Mapbox.CircleLayer
+            id="map-search-target-dot"
+            style={{
+              circleColor: colors.primary,
+              circleRadius: 6,
+            }}
+          />
+          <Mapbox.SymbolLayer
+            id="map-search-target-label"
+            style={{
+              textAllowOverlap: true,
+              textColor: colors.text,
+              textField: ["get", "label"],
+              textHaloColor: "#FFFDF9",
+              textHaloWidth: 2,
+              textOffset: [0, -2.1],
+              textSize: 12,
+            }}
+          />
+        </Mapbox.ShapeSource>
       </Mapbox.MapView>
 
       <View pointerEvents="none" style={styles.mapTextureWash} />
@@ -446,6 +719,39 @@ export function MemoryMap({
           style={[styles.mapBadge, { top: 14 + topInset }]}
         >
           <Text style={styles.mapBadgeText}>{points.length} MEMORIES</Text>
+          <Text style={styles.mapBadgeSubtext}>{photoStatusText}</Text>
+        </View>
+      ) : null}
+
+      {!compact && selectedLibraryMarker ? (
+        <View style={styles.photoPreview}>
+          <View style={styles.photoPreviewImageFrame}>
+            {selectedLibraryMarker.previewPhotoUri ? (
+              <RNImage
+                resizeMode="cover"
+                source={{ uri: selectedLibraryMarker.previewPhotoUri }}
+                style={styles.photo}
+              />
+            ) : (
+              <Text style={styles.libraryPhotoIcon}>▧</Text>
+            )}
+          </View>
+          <View style={styles.photoPreviewText}>
+            <Text style={styles.photoPreviewTitle}>
+              위치 사진 {selectedLibraryMarker.photoCount}개
+            </Text>
+            <Text style={styles.photoPreviewSubtitle}>
+              아직 다이어리에 연결되지 않은 사진입니다.
+            </Text>
+          </View>
+          <Pressable
+            accessibilityLabel="사진 미리보기 닫기"
+            accessibilityRole="button"
+            onPress={() => setSelectedLibraryMarker(undefined)}
+            style={styles.photoPreviewClose}
+          >
+            <Text style={styles.photoPreviewCloseText}>×</Text>
+          </Pressable>
         </View>
       ) : null}
 
@@ -512,7 +818,6 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.map,
       borderRadius: 28,
       flex: 1,
-      minHeight: 390,
       overflow: "hidden",
       position: "relative",
     },
@@ -587,6 +892,56 @@ const createStyles = (colors: ThemeColors) =>
       marginTop: -2,
       width: 14,
     },
+    libraryMarkerCanvas: {
+      alignItems: "center",
+      height: 62,
+      justifyContent: "center",
+      position: "relative",
+      width: 62,
+    },
+    libraryMarkerSelected: {
+      transform: [{ scale: 1.08 }],
+    },
+    libraryPhotoFrame: {
+      alignItems: "center",
+      backgroundColor: "#EAF4F5",
+      borderColor: "#FFFFFF",
+      borderRadius: 8,
+      borderWidth: 3,
+      elevation: 5,
+      height: 48,
+      justifyContent: "center",
+      overflow: "hidden",
+      shadowColor: "#334B50",
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.18,
+      shadowRadius: 7,
+      width: 48,
+    },
+    libraryPhotoIcon: {
+      color: colors.textMuted,
+      fontSize: 18,
+      fontWeight: "800",
+    },
+    libraryCountBadge: {
+      alignItems: "center",
+      backgroundColor: colors.secondary,
+      borderColor: "#FFFFFF",
+      borderRadius: 10,
+      borderWidth: 2,
+      bottom: 4,
+      height: 20,
+      justifyContent: "center",
+      minWidth: 20,
+      paddingHorizontal: 4,
+      position: "absolute",
+      right: 2,
+    },
+    libraryCountText: {
+      color: "#FFFFFF",
+      fontSize: 10,
+      fontWeight: "800",
+    },
     mapTextureWash: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: "rgba(246, 240, 232, 0.05)",
@@ -600,10 +955,71 @@ const createStyles = (colors: ThemeColors) =>
       position: "absolute",
     },
     mapBadgeText: {
-      color: "#FFFFFF",
+      color: colors.text,
       fontSize: 9,
       fontWeight: "800",
       letterSpacing: 1.2,
+    },
+    mapBadgeSubtext: {
+      color: colors.textMuted,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 2,
+    },
+    photoPreview: {
+      alignItems: "center",
+      backgroundColor: "rgba(255, 253, 249, 0.94)",
+      borderColor: "rgba(255,255,255,0.9)",
+      borderRadius: 12,
+      borderWidth: 1,
+      bottom: 18,
+      elevation: 10,
+      flexDirection: "row",
+      gap: 10,
+      left: 16,
+      padding: 10,
+      paddingRight: 48,
+      position: "absolute",
+      right: 76,
+      shadowColor: "#334B50",
+      shadowOffset: { width: 0, height: 5 },
+      shadowOpacity: 0.14,
+      shadowRadius: 14,
+    },
+    photoPreviewImageFrame: {
+      alignItems: "center",
+      backgroundColor: "#EAF4F5",
+      borderRadius: 8,
+      height: 48,
+      justifyContent: "center",
+      overflow: "hidden",
+      width: 48,
+    },
+    photoPreviewText: {
+      flex: 1,
+    },
+    photoPreviewTitle: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    photoPreviewSubtitle: {
+      color: colors.textMuted,
+      fontSize: 11,
+      marginTop: 2,
+    },
+    photoPreviewClose: {
+      alignItems: "center",
+      height: 36,
+      justifyContent: "center",
+      position: "absolute",
+      right: 8,
+      width: 36,
+    },
+    photoPreviewCloseText: {
+      color: colors.text,
+      fontSize: 24,
+      lineHeight: 26,
     },
     fitButton: {
       ...controlButton(colors),

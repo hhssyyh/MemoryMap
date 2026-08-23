@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { SQLiteDiaryRepository } from '../data/SQLiteDiaryRepository';
+import { SQLiteCollectionRepository } from '../data/SQLiteCollectionRepository';
 import type { DiaryEntry, DiaryPoint } from '../types/diary';
 
-type NewDiary = Omit<DiaryEntry, 'id'> & { pointId: string };
-type DiaryUpdate = Omit<DiaryEntry, 'id'> & { diaryId: string; pointId: string };
+type NewDiary = Omit<DiaryEntry, 'id'> & { pointId: string; collectionId?: string };
+type DiaryUpdate = Omit<DiaryEntry, 'id'> & { diaryId: string; pointId: string; collectionId?: string | null };
 
 type DiaryContextValue = {
   points: DiaryPoint[];
@@ -21,6 +22,7 @@ type DiaryContextValue = {
 
 const DiaryContext = createContext<DiaryContextValue | null>(null);
 const repository = new SQLiteDiaryRepository();
+const collectionRepository = new SQLiteCollectionRepository(repository);
 
 const toVisitedAt = (date?: string, time?: string) => {
   if (date?.match(/^\d{4}-\d{2}-\d{2}$/)) return `${date}T${time ?? '12:00'}:00.000Z`;
@@ -50,7 +52,7 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
       const point = savedPoints.find((item) => item.id === pointId);
       if (!point) throw new Error('Selected diary location was not found.');
       const photoUris = diary.photoUris?.length ? diary.photoUris : diary.photoUri ? [diary.photoUri] : [];
-      await repository.createDiary({
+      const diaryId = await repository.createDiary({
         location: point.location,
         latitude: point.coordinate.latitude,
         longitude: point.coordinate.longitude,
@@ -64,6 +66,9 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
         isSaved: diary.isSaved,
         photos: photoUris.map((fileUri) => ({ fileUri })),
       });
+      if (diary.collectionId) {
+        await collectionRepository.addDiary(diary.collectionId, diaryId);
+      }
       await refresh();
     },
     updateDiary: async ({ diaryId, pointId, ...updatedDiary }) => {
@@ -88,6 +93,12 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
         isSaved: existing.isSaved,
         photos: photoUris.map((fileUri) => ({ fileUri })),
       });
+      if (updatedDiary.collectionId !== undefined) {
+        await collectionRepository.replaceDiaryCollections(
+          diaryId,
+          updatedDiary.collectionId ? [updatedDiary.collectionId] : [],
+        );
+      }
       await refresh();
     },
     deleteDiary: async (diaryId) => { await repository.deleteDiary(diaryId); await refresh(); },

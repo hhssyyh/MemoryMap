@@ -1,16 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Alert, Pressable, ScrollView, StatusBar, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { spacing, type ThemeColors } from '../constants/theme';
 import { useAppTheme } from '../context/ThemeContext';
+import { CollectionSelector } from '../components/CollectionSelector';
 import { DiaryPhotoPicker } from '../components/DiaryPhotoPicker';
 import { useDiaries } from '../context/DiaryContext';
+import { SQLiteCollectionRepository } from '../data/SQLiteCollectionRepository';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import type { DiaryCollection } from '../types/collection';
 import { ThemedText as Text } from '../components/ThemedText';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditDiary'>;
+const collectionRepository = new SQLiteCollectionRepository();
 
 function getInitialPhotos(photoUri?: string, photoUris?: string[]) {
   return Array.from(new Set((photoUris?.length ? photoUris : photoUri ? [photoUri] : []).filter(Boolean)));
@@ -26,9 +30,21 @@ export function EditDiaryScreen({ navigation, route }: Props) {
   const [summary, setSummary] = useState(diary?.summary ?? '');
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>(diary?.tags ?? []);
+  const [collections, setCollections] = useState<DiaryCollection[]>([]);
+  const [collectionId, setCollectionId] = useState<string>();
   const [photoUris, setPhotoUris] = useState<string[]>(() => getInitialPhotos(diary?.photoUri, diary?.photoUris));
   const [coverPhotoUri, setCoverPhotoUri] = useState<string | undefined>(() => diary?.photos?.find((photo) => photo.isCover)?.fileUri ?? getInitialPhotos(diary?.photoUri, diary?.photoUris)[0]);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    void Promise.all([
+      collectionRepository.listCollections(),
+      collectionRepository.listCollectionIdsForDiary(route.params.diaryId),
+    ]).then(([nextCollections, collectionIds]) => {
+      setCollections(nextCollections);
+      setCollectionId(collectionIds[0]);
+    });
+  }, [route.params.diaryId]);
 
   if (!diary) return <View style={styles.screen}><Text style={styles.missing}>기록을 찾을 수 없습니다.</Text></View>;
 
@@ -77,6 +93,7 @@ export function EditDiaryScreen({ navigation, route }: Props) {
         photoUri: orderedPhotoUris[0],
         photoUris: orderedPhotoUris,
         tags: nextTags,
+        collectionId: collectionId ?? null,
       });
       navigation.goBack();
     } catch {
@@ -111,6 +128,13 @@ export function EditDiaryScreen({ navigation, route }: Props) {
         <TextInput onChangeText={setTitle} style={styles.input} value={title} />
         <Text style={styles.label}>기록</Text>
         <TextInput multiline onChangeText={setSummary} style={[styles.input, styles.summary]} textAlignVertical="top" value={summary} />
+        <Text style={styles.label}>모음집</Text>
+        <CollectionSelector
+          allowNone
+          collections={collections}
+          onSelect={setCollectionId}
+          selectedCollectionId={collectionId}
+        />
         <Text style={styles.label}>태그</Text>
         <View style={styles.tagInputRow}>
           <TextInput
