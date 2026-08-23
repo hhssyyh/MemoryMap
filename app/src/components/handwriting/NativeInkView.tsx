@@ -46,7 +46,7 @@ export function NativeInkCanvas({
   }));
   const snapshotRef = useRef(snapshot);
   const [resyncKey, setResyncKey] = useState(0);
-  const selectedTool = tool === 'select' ? 'navigate' : tool;
+  const selectedTool = tool === 'select' || tool === 'lasso' ? 'navigate' : tool;
 
   useEffect(() => {
     const next = replaceInkSnapshot(

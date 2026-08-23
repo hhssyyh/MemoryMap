@@ -22,6 +22,7 @@ import {
   type HandwritingPanelSection,
 } from '../components/handwriting/HandwritingEditorPanel';
 import { HandwritingToolbar } from '../components/handwriting/HandwritingToolbar';
+import { InkSelectionOverlay } from '../components/handwriting/InkSelectionOverlay';
 import { EditorViewport, LayerTransformOverlay } from '../components/handwriting/EditorViewport';
 import {
   InkInputAdapter,
@@ -71,6 +72,7 @@ import {
   setPageBackground,
   setPageInkStrokes,
   setPageThumbnail,
+  translatePageInkStrokes,
   updateLayer,
   rotatePage,
 } from '../utils/handwritingDocument';
@@ -549,6 +551,7 @@ export function HandwritingEditorScreen({ navigation, route }: Props) {
             <PanelButton active={tool === 'pen'} label="펜" onPress={() => setTool('pen')} />
             <PanelButton active={tool === 'highlighter'} label="마커" onPress={() => setTool('highlighter')} />
             <PanelButton active={tool === 'select'} label="선택" onPress={() => setTool('select')} />
+            <PanelButton active={tool === 'lasso'} label="필기 올가미" onPress={() => setTool('lasso')} />
             <PanelButton active={tool === 'navigate'} label="이동" onPress={() => setTool('navigate')} />
           </View>
           <SectionTitle>잉크 색상</SectionTitle>
@@ -824,6 +827,18 @@ export function HandwritingEditorScreen({ navigation, route }: Props) {
                 strokes={getPageInkStrokes(selectedPage)}
                 tool={tool}
                 width={strokeWidth}
+              />
+            ) : null}
+            {tool === 'lasso' ? (
+              <InkSelectionOverlay
+                key={selectedPage.id}
+                onMove={(selectedIds, delta) => commit((current) =>
+                  translatePageInkStrokes(current, selectedPage.id, selectedIds, delta))}
+                pageHeight={selectedPage.height}
+                pageWidth={selectedPage.width}
+                renderedHeight={renderedPageSize.height}
+                renderedWidth={renderedPageSize.width}
+                strokes={getPageInkStrokes(selectedPage)}
               />
             ) : null}
             {tool === 'select' ? (

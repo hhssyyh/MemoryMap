@@ -33,7 +33,7 @@ import type {
   StickerLayer,
 } from '../../types/handwriting';
 
-export type EditorTool = InkTool | 'eraser' | 'select' | 'navigate';
+export type EditorTool = InkTool | 'eraser' | 'select' | 'lasso' | 'navigate';
 
 type CanvasSize = { width: number; height: number };
 

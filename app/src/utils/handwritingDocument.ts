@@ -17,6 +17,7 @@ import {
 } from '../types/handwriting';
 import { createHandwritingPage, duplicateHandwritingPage } from './handwriting';
 import { createHandwritingId } from './handwriting';
+import { translateSelectedInkStrokes } from './handwritingInkSelection';
 
 function replacePage(
   document: HandwritingDocument,
@@ -129,6 +130,19 @@ export function setPageInkStrokes(
       layer.type === 'ink' && layer.name === '필기' ? { ...layer, strokes } : layer,
     ),
   }));
+}
+
+export function translatePageInkStrokes(
+  document: HandwritingDocument,
+  pageId: string,
+  selectedIds: ReadonlySet<string>,
+  delta: { x: number; y: number },
+): HandwritingDocument {
+  const page = document.pages.find((candidate) => candidate.id === pageId);
+  if (!page) return document;
+  const strokes = getPageInkStrokes(page);
+  const translated = translateSelectedInkStrokes(strokes, selectedIds, delta, page);
+  return translated === strokes ? document : setPageInkStrokes(document, pageId, translated);
 }
 
 export function setPageThumbnail(
