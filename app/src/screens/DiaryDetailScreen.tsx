@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   Alert,
@@ -20,6 +20,7 @@ import { ThemedText as Text } from '../components/ThemedText';
 import { useDiaries } from '../context/DiaryContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { DiaryEntry } from '../types/diary';
+import { isTablet } from '../utils/isTablet';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DiaryDetail'>;
 
@@ -46,6 +47,16 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
   const [photoIndex, setPhotoIndex] = useState(0);
   const tags = diary.tags?.length ? diary.tags : ['여행일기', location.split(',')[0]];
 
+  const closeDetail = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    // 딥링크나 개발용 직접 진입처럼 상세 화면이 root인 경우에는 다이어리 탭으로 복귀한다.
+    navigation.replace('MainTabs', { screen: 'Diary' });
+  }, [navigation]);
+
   const onPhotoScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const nextIndex = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
     setPhotoIndex(Math.max(0, Math.min(nextIndex, photos.length - 1)));
@@ -58,7 +69,7 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
         text: '삭제',
         style: 'destructive',
         onPress: () => {
-          void deleteDiary(diary.id).then(() => navigation.goBack());
+          void deleteDiary(diary.id).then(closeDetail);
         },
       },
     ]);
@@ -194,7 +205,7 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
         <Pressable
           accessibilityLabel="상세 닫기"
           accessibilityRole="button"
-          onPress={navigation.goBack}
+          onPress={closeDetail}
           style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}
         >
           <Text style={styles.topButtonText}>‹</Text>
@@ -210,6 +221,20 @@ export function DiaryDetailScreen({ navigation, route }: Props) {
       </View>
 
       <View style={[styles.actionBar, { bottom: insets.bottom + 10 }]}>
+        {isTablet() ? (
+          <>
+            <Pressable
+              accessibilityLabel="손글씨 프로토타입"
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('HandwritingPrototype', { diary })}
+              style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+            >
+              <Text style={styles.actionIcon}>✎</Text>
+              <Text style={styles.actionText}>손글씨</Text>
+            </Pressable>
+            <View style={styles.actionDivider} />
+          </>
+        ) : null}
         <Pressable
           onPress={() => void toggleDiarySaved(diary.id)}
           style={({ pressed }) => [styles.action, diary.isSaved && styles.actionSaved, pressed && styles.pressed]}

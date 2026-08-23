@@ -1,0 +1,9 @@
+{
+  "name": "native-ink-view",
+  "version": "1.0.0",
+  "description": "Native ink/stylus input view (PencilKit on iOS, MotionEvent stylus on Android)",
+  "main": "src/index.ts",
+  "license": "MIT",
+  "author": "MemoryMap",
+  "homepage": "https://github.com/team00010/memory_map"
+}
