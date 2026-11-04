@@ -70,6 +70,7 @@ export class SQLiteDiaryRepository implements DiaryRepository {
   async createDiary(input: SaveDiaryInput) {
     const id = input.id ?? newId();
     await this.writeDiary({ ...input, id }, true);
+    return id;
   }
 
   async updateDiary(input: SaveDiaryInput & { id: string }) { await this.writeDiary(input, false); }

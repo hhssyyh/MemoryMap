@@ -13,17 +13,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { spacing, type ThemeColors } from '../constants/theme';
 import { useAppTheme } from '../context/ThemeContext';
+import { CollectionSelector } from '../components/CollectionSelector';
 import { DiaryPhotoPicker } from '../components/DiaryPhotoPicker';
 import { useDiaries } from '../context/DiaryContext';
+import { SQLiteCollectionRepository } from '../data/SQLiteCollectionRepository';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import type { DiaryCollection } from '../types/collection';
 import { ThemedText as Text } from '../components/ThemedText';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateDiary'>;
+const collectionRepository = new SQLiteCollectionRepository();
 
 export function CreateDiaryScreen({ navigation }: Props) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const { addDiary, savedPoints } = useDiaries();
+  const [collections, setCollections] = useState<DiaryCollection[]>([]);
+  const [collectionId, setCollectionId] = useState<string>();
   const [pointId, setPointId] = useState(savedPoints[0]?.id ?? '');
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -33,6 +39,13 @@ export function CreateDiaryScreen({ navigation }: Props) {
   useEffect(() => {
     if (!pointId && savedPoints[0]) setPointId(savedPoints[0].id);
   }, [pointId, savedPoints]);
+
+  useEffect(() => {
+    void collectionRepository.listCollections().then((nextCollections) => {
+      setCollections(nextCollections);
+      setCollectionId((current) => current ?? nextCollections[0]?.id);
+    });
+  }, []);
 
   const save = async () => {
     if (!pointId || !photoUri || !title.trim() || !summary.trim()) {
@@ -49,6 +62,7 @@ export function CreateDiaryScreen({ navigation }: Props) {
         photoUris: [photoUri],
         date: new Date().toISOString().slice(0, 10),
         visitedAt: new Date().toISOString(),
+        collectionId,
       });
       navigation.goBack();
     } catch {
@@ -79,6 +93,13 @@ export function CreateDiaryScreen({ navigation }: Props) {
             </Pressable>
           ))}
         </View>
+        <Text style={styles.label}>모음집</Text>
+        <CollectionSelector
+          allowNone
+          collections={collections}
+          onSelect={setCollectionId}
+          selectedCollectionId={collectionId}
+        />
         <Text style={styles.label}>사진</Text>
         <DiaryPhotoPicker onChange={setPhotoUri} photoUri={photoUri} />
         <Text style={styles.label}>제목</Text>

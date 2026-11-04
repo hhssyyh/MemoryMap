@@ -6,10 +6,13 @@ import type { ThemeColors } from '../constants/theme';
 import { useAppTheme } from '../context/ThemeContext';
 import type { DiaryPoint } from '../types/diary';
 import type { CurrentCoordinate } from '../hooks/useCurrentLocation';
+import type { PhotoMapMarker } from '../types/photoLocation';
 import { MemoryMap } from './MemoryMap';
 
 type FullscreenMapModalProps = {
   points: DiaryPoint[];
+  photoMarkers?: PhotoMapMarker[];
+  photoSyncStatus?: "idle" | "permission_required" | "syncing" | "ready" | "error";
   highlightedPointId?: string;
   visible: boolean;
   onClose: () => void;
@@ -22,6 +25,8 @@ type FullscreenMapModalProps = {
 
 export function FullscreenMapModal({
   points,
+  photoMarkers,
+  photoSyncStatus,
   highlightedPointId,
   visible,
   onClose,
@@ -53,6 +58,8 @@ export function FullscreenMapModal({
           onSelectPoint={onSelectPoint}
           isLocating={isLocating}
           onRequestLocation={onRequestLocation}
+          photoMarkers={photoMarkers}
+          photoSyncStatus={photoSyncStatus}
           points={points}
           topInset={insets.top}
         />

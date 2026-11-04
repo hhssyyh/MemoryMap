@@ -65,6 +65,7 @@ modules/*/android/build/
 android/.idea/
 android/captures/
 android/**/.cxx/
+modules/native-ink-view/android/build/
 
 # APK / AAB outputs
 *.apk

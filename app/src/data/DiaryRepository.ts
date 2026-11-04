@@ -30,7 +30,7 @@ export interface DiaryRepository {
   listPoints(): Promise<DiaryPoint[]>;
   listSavedPoints(): Promise<DiaryPoint[]>;
   getDiary(diaryId: string): Promise<DiaryEntry | null>;
-  createDiary(input: SaveDiaryInput): Promise<void>;
+  createDiary(input: SaveDiaryInput): Promise<string>;
   updateDiary(input: SaveDiaryInput & { id: string }): Promise<void>;
   deleteDiary(diaryId: string): Promise<void>;
   toggleDiarySaved(diaryId: string): Promise<void>;
