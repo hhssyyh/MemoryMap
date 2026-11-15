@@ -190,6 +190,25 @@ const migrations: ReadonlyArray<string> = [
     )
     WHERE cover_photo_uri IS NULL;
   `,
+    `
+    CREATE TABLE IF NOT EXISTS base_points (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      radius_meters REAL NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      CHECK (latitude >= -90 AND latitude <= 90),
+      CHECK (longitude >= -180 AND longitude <= 180),
+      CHECK (radius_meters > 0),
+      CHECK (is_active IN (0, 1))
+    );
+
+    CREATE INDEX IF NOT EXISTS base_points_active_idx
+      ON base_points(is_active);
+  `,
 ];
 
 async function migrate(database: SQLite.SQLiteDatabase) {
