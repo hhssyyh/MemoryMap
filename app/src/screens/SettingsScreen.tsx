@@ -1,3 +1,4 @@
+import { GeofenceDebugCard } from "../components/GeofenceDebugCard";
 import {
   Pressable,
   ScrollView,
@@ -82,6 +83,7 @@ export function SettingsScreen() {
       </View>
 
       <BasePointSettingsCard />
+      {__DEV__ ? <GeofenceDebugCard /> : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
