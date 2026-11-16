@@ -209,6 +209,43 @@ const migrations: ReadonlyArray<string> = [
     CREATE INDEX IF NOT EXISTS base_points_active_idx
       ON base_points(is_active);
   `,
+    `
+    CREATE TABLE IF NOT EXISTS geofence_events (
+      id TEXT PRIMARY KEY NOT NULL,
+      base_point_id TEXT,
+      transition_type TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      latitude REAL,
+      longitude REAL,
+      source TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (base_point_id)
+        REFERENCES base_points(id)
+        ON DELETE SET NULL,
+      CHECK (transition_type IN ('ENTER', 'EXIT')),
+      CHECK (
+        source IN (
+          'BACKGROUND_GEOFENCE',
+          'FOREGROUND_DISTANCE',
+          'MANUAL_TEST'
+        )
+      ),
+      CHECK (
+        latitude IS NULL OR
+        (latitude >= -90 AND latitude <= 90)
+      ),
+      CHECK (
+        longitude IS NULL OR
+        (longitude >= -180 AND longitude <= 180)
+      )
+    );
+
+    CREATE INDEX IF NOT EXISTS geofence_events_occurred_at_idx
+      ON geofence_events(occurred_at DESC);
+
+    CREATE INDEX IF NOT EXISTS geofence_events_base_point_idx
+      ON geofence_events(base_point_id, occurred_at DESC);
+  `,
 ];
 
 async function migrate(database: SQLite.SQLiteDatabase) {
